@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My AI</title>
+
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      color: white;
+      font-family: Arial, sans-serif;
+    }
+
+    header {
+      padding: 20px;
+      text-align: center;
+      font-size: 24px;
+      font-weight: bold;
+      border-bottom: 1px solid #333;
+    }
+
+    #chat {
+      padding: 15px;
+      height: 70vh;
+      overflow-y: auto;
+    }
+
+    .message {
+      padding: 12px;
+      margin: 10px 0;
+      border-radius: 15px;
+      max-width: 80%;
+    }
+
+    .user {
+      background: #2675ff;
+      margin-left: auto;
+    }
+
+    .ai {
+      background: #333;
+    }
+
+    .input-area {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 10px;
+      background: #111;
+      display: flex;
+      gap: 8px;
+    }
+
+    input {
+      flex: 1;
+      padding: 12px;
+      border-radius: 20px;
+      border: 1px solid #555;
+      background: #222;
+      color: white;
+      font-size: 16px;
+    }
+
+    button {
+      border: none;
+      border-radius: 20px;
+      padding: 12px 16px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+
+<header>My AI</header>
+
+<div id="chat">
+  <div class="message ai">
+    Hello 👋 I'm your AI assistant. We're building me together.
+  </div>
+</div>
+
+<div class="input-area">
+  <input id="message" placeholder="Talk to me...">
+  <button onclick="sendMessage()">Send</button>
+</div>
+
+<script>
+function sendMessage() {
+
+  const input = document.getElementById("message");
+  const chat = document.getElementById("chat");
+
+  if (input.value.trim() === "") return;
+
+  const userMessage = document.createElement("div");
+  userMessage.className = "message user";
+  userMessage.textContent = input.value;
+
+  chat.appendChild(userMessage);
+
+  const aiMessage = document.createElement("div");
+  aiMessage.className = "message ai";
+  aiMessage.textContent =
+    "I received your message. We're going to connect my AI brain next.";
+
+  chat.appendChild(aiMessage);
+
+  input.value = "";
+  chat.scrollTop = chat.scrollHeight;
+}
+</script>
+
+</body>
+</html>
