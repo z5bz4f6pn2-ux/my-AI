@@ -13,11 +13,30 @@
     }
 
     header {
-      padding: 20px;
-      text-align: center;
+      padding: 15px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #333;
+    }
+
+    .title {
       font-size: 24px;
       font-weight: bold;
-      border-bottom: 1px solid #333;
+    }
+
+    #newChatButton {
+      border: 1px solid #555;
+      border-radius: 18px;
+      padding: 8px 12px;
+      background: #222;
+      color: white;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    #newChatButton:hover {
+      background: #333;
     }
 
     #chat {
@@ -78,36 +97,56 @@
       cursor: pointer;
     }
 
-    button:active {
-      transform: scale(0.97);
+    .send-button {
+      background: white;
+      color: black;
     }
   </style>
 </head>
 
 <body>
 
-<header>My AI</header>
+<header>
+
+  <div class="title">My AI</div>
+
+  <button id="newChatButton" onclick="newChat()">
+    + New Chat
+  </button>
+
+</header>
 
 <div id="chat">
+
   <div class="message ai">
     Hello 👋 I'm your AI assistant. We're building me together.
   </div>
+
 </div>
 
 <div class="input-area">
+
   <input
     id="message"
     placeholder="Talk to me..."
     autocomplete="off"
   >
 
-  <button onclick="sendMessage()">Send</button>
+  <button
+    class="send-button"
+    onclick="sendMessage()"
+  >
+    Send
+  </button>
+
 </div>
 
 <script>
 
-const conversationHistory = [];
+let conversationHistory = [];
 
+
+// Send a message
 async function sendMessage() {
 
   const input = document.getElementById("message");
@@ -117,69 +156,104 @@ async function sendMessage() {
 
   if (message === "") return;
 
-  // Show user's message
-  const userMessage = document.createElement("div");
 
-  userMessage.className = "message user";
-  userMessage.textContent = message;
+  // Show user's message
+  const userMessage =
+    document.createElement("div");
+
+  userMessage.className =
+    "message user";
+
+  userMessage.textContent =
+    message;
 
   chat.appendChild(userMessage);
+
 
   // Clear input
   input.value = "";
 
-  // Save message to conversation history
+
+  // Save user message
   conversationHistory.push({
     role: "user",
     content: message
   });
 
-  // Create AI response bubble
-  const aiMessage = document.createElement("div");
 
-  aiMessage.className = "message ai";
-  aiMessage.textContent = "Thinking...";
+  // Create AI message
+  const aiMessage =
+    document.createElement("div");
+
+  aiMessage.className =
+    "message ai";
+
+  aiMessage.textContent =
+    "Thinking...";
 
   chat.appendChild(aiMessage);
 
-  chat.scrollTop = chat.scrollHeight;
+  chat.scrollTop =
+    chat.scrollHeight;
+
 
   try {
 
-    const response = await fetch("/api/chat", {
-      method: "POST",
+    const response =
+      await fetch("/api/chat", {
 
-      headers: {
-        "Content-Type": "application/json"
-      },
+        method: "POST",
 
-      body: JSON.stringify({
-        message: message,
+        headers: {
+          "Content-Type":
+            "application/json"
+        },
 
-        history: conversationHistory.slice(0, -1)
-      })
-    });
+        body: JSON.stringify({
 
-    const data = await response.json();
+          message: message,
+
+          history:
+            conversationHistory.slice(0, -1)
+
+        })
+
+      });
+
+
+    const data =
+      await response.json();
+
 
     if (!response.ok) {
+
       throw new Error(
-        data.error || "Something went wrong"
+        data.error ||
+        "Something went wrong"
       );
+
     }
+
 
     const reply =
       data.response ||
       "I couldn't generate a response.";
 
-    // Show AI response
-    aiMessage.textContent = reply;
 
-    // Save AI response to conversation history
+    // Display response
+    aiMessage.textContent =
+      reply;
+
+
+    // Save AI response
     conversationHistory.push({
+
       role: "assistant",
+
       content: reply
+
     });
+
 
   } catch (error) {
 
@@ -187,38 +261,80 @@ async function sendMessage() {
       "Sorry, something went wrong: " +
       error.message;
 
-    // Remove failed user message from history
+
+    // Remove failed user message
     conversationHistory.pop();
+
   }
 
-  chat.scrollTop = chat.scrollHeight;
 
-  // Put cursor back into input
+  chat.scrollTop =
+    chat.scrollHeight;
+
+
+  // Focus input again
   input.focus();
+
+}
+
+
+// New Chat
+function newChat() {
+
+  conversationHistory = [];
+
+
+  const chat =
+    document.getElementById("chat");
+
+
+  chat.innerHTML = `
+
+    <div class="message ai">
+
+      Hello 👋 I'm your AI assistant.
+      This is a new conversation.
+
+    </div>
+
+  `;
+
+
+  // Focus input immediately
+  document
+    .getElementById("message")
+    .focus();
+
 }
 
 
 // Enter sends message
-// Shift + Enter creates a new line
+// Shift + Enter allows a new line
+
 const messageInput =
   document.getElementById("message");
+
 
 messageInput.addEventListener(
   "keydown",
   function(event) {
 
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey
+    ) {
 
       event.preventDefault();
 
       sendMessage();
+
     }
+
   }
 );
 
 
-// Automatically focus the input
-// when My AI opens
+// Automatically focus input
 messageInput.focus();
 
 </script>
