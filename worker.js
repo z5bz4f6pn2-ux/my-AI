@@ -2,6 +2,94 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const userId = "default-user";
+        // --------------------------------------------------
+    // GET SAVED MEMORIES
+    // --------------------------------------------------
+
+    if (
+      url.pathname === "/api/memories" &&
+      request.method === "GET"
+    ) {
+      try {
+
+        const result =
+          await env.DB
+            .prepare(`
+              SELECT id, memory, created_at
+              FROM memories
+              WHERE user_id = ?
+              ORDER BY created_at DESC
+            `)
+            .bind(userId)
+            .all();
+
+        return Response.json({
+          memories:
+            result.results || []
+        });
+
+      } catch (error) {
+
+        return Response.json(
+          {
+            error:
+              error.message
+          },
+          {
+            status: 500
+          }
+        );
+
+      }
+    }
+
+
+    // --------------------------------------------------
+    // DELETE ONE MEMORY
+    // --------------------------------------------------
+
+    if (
+      url.pathname.startsWith("/api/memories/") &&
+      request.method === "DELETE"
+    ) {
+      try {
+
+        const id =
+          url.pathname
+            .split("/")
+            .pop();
+
+
+        await env.DB
+          .prepare(`
+            DELETE FROM memories
+            WHERE id = ? AND user_id = ?
+          `)
+          .bind(
+            id,
+            userId
+          )
+          .run();
+
+
+        return Response.json({
+          success: true
+        });
+
+      } catch (error) {
+
+        return Response.json(
+          {
+            error:
+              error.message
+          },
+          {
+            status: 500
+          }
+        );
+
+      }
+    }
 
     // --------------------------------------------------
     // GET SAVED CONVERSATIONS
