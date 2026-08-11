@@ -110,7 +110,10 @@
 
   <div class="title">My AI</div>
 
-  <button id="newChatButton" onclick="newChat()">
+  <button
+    id="newChatButton"
+    onclick="newChat()"
+  >
     + New Chat
   </button>
 
@@ -145,19 +148,28 @@
 
 let conversationHistory = [];
 
+let conversationId = null;
 
-// Send a message
+
+// --------------------------------------------------
+// SEND MESSAGE
+// --------------------------------------------------
+
 async function sendMessage() {
 
-  const input = document.getElementById("message");
-  const chat = document.getElementById("chat");
+  const input =
+    document.getElementById("message");
 
-  const message = input.value.trim();
+  const chat =
+    document.getElementById("chat");
+
+  const message =
+    input.value.trim();
 
   if (message === "") return;
 
 
-  // Show user's message
+  // Display user message
   const userMessage =
     document.createElement("div");
 
@@ -174,14 +186,14 @@ async function sendMessage() {
   input.value = "";
 
 
-  // Save user message
+  // Add to local history
   conversationHistory.push({
     role: "user",
     content: message
   });
 
 
-  // Create AI message
+  // Create thinking message
   const aiMessage =
     document.createElement("div");
 
@@ -214,7 +226,10 @@ async function sendMessage() {
           message: message,
 
           history:
-            conversationHistory.slice(0, -1)
+            conversationHistory.slice(0, -1),
+
+          conversationId:
+            conversationId
 
         })
 
@@ -235,17 +250,26 @@ async function sendMessage() {
     }
 
 
+    // Store conversation ID
+    if (data.conversationId) {
+
+      conversationId =
+        data.conversationId;
+
+    }
+
+
     const reply =
       data.response ||
       "I couldn't generate a response.";
 
 
-    // Display response
+    // Display AI response
     aiMessage.textContent =
       reply;
 
 
-    // Save AI response
+    // Save AI response locally
     conversationHistory.push({
 
       role: "assistant",
@@ -272,16 +296,21 @@ async function sendMessage() {
     chat.scrollHeight;
 
 
-  // Focus input again
+  // Focus input
   input.focus();
 
 }
 
 
-// New Chat
+// --------------------------------------------------
+// NEW CHAT
+// --------------------------------------------------
+
 function newChat() {
 
   conversationHistory = [];
+
+  conversationId = null;
 
 
   const chat =
@@ -300,7 +329,6 @@ function newChat() {
   `;
 
 
-  // Focus input immediately
   document
     .getElementById("message")
     .focus();
@@ -308,8 +336,9 @@ function newChat() {
 }
 
 
-// Enter sends message
-// Shift + Enter allows a new line
+// --------------------------------------------------
+// ENTER KEY
+// --------------------------------------------------
 
 const messageInput =
   document.getElementById("message");
