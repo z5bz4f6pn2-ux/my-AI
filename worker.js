@@ -4,17 +4,37 @@ export default {
 
     if (url.pathname === "/api/chat" && request.method === "POST") {
       try {
-        const { message } = await request.json();
+        const { message, history = [] } = await request.json();
 
         if (!message) {
           return new Response("Missing message", { status: 400 });
         }
 
-        const result = await env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
-          prompt: message
+        const messages = [
+          {
+            role: "system",
+            content:
+              "You are My AI, a helpful, intelligent and conversational AI assistant. Speak naturally and directly. Answer the user's actual question. Do not continue stories or text unless the user asks you to. Keep responses reasonably concise unless more detail is useful."
+          },
+          ...history,
+          {
+            role: "user",
+            content: message
+          }
+        ];
+
+        const result = await env.AI.run(
+          "@cf/meta/llama-3.1-8b-instruct-fast",
+          {
+            messages: messages,
+            max_tokens: 512
+          }
+        );
+
+        return Response.json({
+          response: result.response
         });
 
-        return Response.json(result);
       } catch (error) {
         return Response.json(
           { error: error.message },
