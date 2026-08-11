@@ -30,7 +30,12 @@
       font-weight: bold;
     }
 
-    #newChatButton {
+    .header-buttons {
+      display: flex;
+      gap: 8px;
+    }
+
+    .header-button {
       border: 1px solid #555;
       border-radius: 18px;
       padding: 8px 12px;
@@ -40,7 +45,7 @@
       cursor: pointer;
     }
 
-    #newChatButton:hover {
+    .header-button:hover {
       background: #333;
     }
 
@@ -152,10 +157,81 @@
       color: black;
     }
 
+    /* MEMORY PANEL */
+
+    #memoryPanel {
+      display: none;
+      position: fixed;
+      top: 60px;
+      right: 20px;
+      width: 350px;
+      max-height: 70vh;
+      overflow-y: auto;
+      background: #1b1b1b;
+      border: 1px solid #444;
+      border-radius: 15px;
+      padding: 18px;
+      z-index: 100;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+
+    #memoryPanel h2 {
+      margin-top: 0;
+      margin-bottom: 5px;
+    }
+
+    .memory-description {
+      color: #999;
+      font-size: 13px;
+      margin-bottom: 15px;
+    }
+
+    .memory-item {
+      background: #252525;
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+
+    .memory-text {
+      margin-bottom: 10px;
+      line-height: 1.4;
+    }
+
+    .delete-memory {
+      background: #442222;
+      color: #ffb0b0;
+      padding: 7px 11px;
+      border-radius: 15px;
+      font-size: 12px;
+    }
+
+    .delete-memory:hover {
+      background: #662222;
+    }
+
+    .close-memory {
+      background: #333;
+      color: white;
+      float: right;
+      padding: 6px 10px;
+    }
+
+    .no-memories {
+      color: #888;
+      padding: 10px 0;
+    }
+
     @media (max-width: 700px) {
 
       #sidebar {
         width: 190px;
+      }
+
+      #memoryPanel {
+        left: 10px;
+        right: 10px;
+        width: auto;
       }
 
       .message {
@@ -178,12 +254,23 @@
     My AI
   </div>
 
-  <button
-    id="newChatButton"
-    onclick="newChat()"
-  >
-    + New Chat
-  </button>
+  <div class="header-buttons">
+
+    <button
+      class="header-button"
+      onclick="toggleMemoryPanel()"
+    >
+      🧠 Memory
+    </button>
+
+    <button
+      class="header-button"
+      onclick="newChat()"
+    >
+      + New Chat
+    </button>
+
+  </div>
 
 </header>
 
@@ -242,6 +329,30 @@
 </div>
 
 
+<!-- MEMORY PANEL -->
+
+<div id="memoryPanel">
+
+  <button
+    class="close-memory"
+    onclick="toggleMemoryPanel()"
+  >
+    ✕
+  </button>
+
+  <h2>My Memories</h2>
+
+  <div class="memory-description">
+    These are the things My AI has permanently remembered.
+  </div>
+
+  <div id="memoryList">
+    Loading...
+  </div>
+
+</div>
+
+
 <script>
 
 let conversationHistory = [];
@@ -270,6 +381,7 @@ async function loadConversations() {
     const data =
       await response.json();
 
+
     if (!response.ok) {
       throw new Error(
         data.error ||
@@ -290,6 +402,7 @@ async function loadConversations() {
         "<div style='color:#777;'>No saved chats yet.</div>";
 
       return;
+
     }
 
 
@@ -300,6 +413,7 @@ async function loadConversations() {
           document.createElement(
             "div"
           );
+
 
         item.className =
           "chat-item";
@@ -328,7 +442,9 @@ async function loadConversations() {
           );
 
 
-        list.appendChild(item);
+        list.appendChild(
+          item
+        );
 
       }
     );
@@ -360,6 +476,7 @@ async function loadConversation(id) {
         id
       );
 
+
     const data =
       await response.json();
 
@@ -383,6 +500,7 @@ async function loadConversation(id) {
       document.getElementById(
         "chat"
       );
+
 
     chat.innerHTML = "";
 
@@ -436,7 +554,9 @@ async function loadConversation(id) {
 
 
     document
-      .getElementById("message")
+      .getElementById(
+        "message"
+      )
       .focus();
 
 
@@ -464,10 +584,12 @@ async function sendMessage() {
       "message"
     );
 
+
   const chat =
     document.getElementById(
       "chat"
     );
+
 
   const message =
     input.value.trim();
@@ -478,18 +600,19 @@ async function sendMessage() {
   }
 
 
-  // Show user message
-
   const userMessage =
     document.createElement(
       "div"
     );
 
+
   userMessage.className =
     "message user";
 
+
   userMessage.textContent =
     message;
+
 
   chat.appendChild(
     userMessage
@@ -501,25 +624,28 @@ async function sendMessage() {
 
   conversationHistory.push({
 
-    role: "user",
+    role:
+      "user",
 
-    content: message
+    content:
+      message
 
   });
 
-
-  // Thinking message
 
   const aiMessage =
     document.createElement(
       "div"
     );
 
+
   aiMessage.className =
     "message ai";
 
+
   aiMessage.textContent =
     "Thinking...";
+
 
   chat.appendChild(
     aiMessage
@@ -537,7 +663,8 @@ async function sendMessage() {
         "/api/chat",
         {
 
-          method: "POST",
+          method:
+            "POST",
 
           headers: {
             "Content-Type":
@@ -579,8 +706,6 @@ async function sendMessage() {
     }
 
 
-    // Store conversation ID
-
     if (
       data.conversationId
     ) {
@@ -610,8 +735,6 @@ async function sendMessage() {
 
     });
 
-
-    // Refresh sidebar
 
     loadConversations();
 
@@ -670,8 +793,236 @@ function newChat() {
 
 
   document
-    .getElementById("message")
+    .getElementById(
+      "message"
+    )
     .focus();
+
+}
+
+
+// --------------------------------------------------
+// LOAD MEMORIES
+// --------------------------------------------------
+
+async function loadMemories() {
+
+  const list =
+    document.getElementById(
+      "memoryList"
+    );
+
+
+  list.innerHTML =
+    "Loading...";
+
+
+  try {
+
+    const response =
+      await fetch(
+        "/api/memories"
+      );
+
+
+    const data =
+      await response.json();
+
+
+    if (!response.ok) {
+
+      throw new Error(
+        data.error ||
+        "Unable to load memories"
+      );
+
+    }
+
+
+    list.innerHTML = "";
+
+
+    if (
+      !data.memories ||
+      data.memories.length === 0
+    ) {
+
+      list.innerHTML =
+        `<div class="no-memories">
+          My AI hasn't permanently remembered anything yet.
+        </div>`;
+
+      return;
+
+    }
+
+
+    data.memories.forEach(
+      memory => {
+
+        const item =
+          document.createElement(
+            "div"
+          );
+
+
+        item.className =
+          "memory-item";
+
+
+        const text =
+          document.createElement(
+            "div"
+          );
+
+
+        text.className =
+          "memory-text";
+
+
+        text.textContent =
+          memory.memory;
+
+
+        const deleteButton =
+          document.createElement(
+            "button"
+          );
+
+
+        deleteButton.className =
+          "delete-memory";
+
+
+        deleteButton.textContent =
+          "Delete";
+
+
+        deleteButton.onclick = () =>
+          deleteMemory(
+            memory.id
+          );
+
+
+        item.appendChild(
+          text
+        );
+
+
+        item.appendChild(
+          deleteButton
+        );
+
+
+        list.appendChild(
+          item
+        );
+
+      }
+    );
+
+
+  } catch (error) {
+
+    list.innerHTML =
+      `<div style="color:#f66;">
+        Unable to load memories.
+      </div>`;
+
+    console.error(error);
+
+  }
+
+}
+
+
+// --------------------------------------------------
+// DELETE MEMORY
+// --------------------------------------------------
+
+async function deleteMemory(id) {
+
+  const confirmed =
+    confirm(
+      "Are you sure you want My AI to forget this?"
+    );
+
+
+  if (!confirmed) {
+    return;
+  }
+
+
+  try {
+
+    const response =
+      await fetch(
+        "/api/memories/" +
+        id,
+        {
+          method:
+            "DELETE"
+        }
+      );
+
+
+    const data =
+      await response.json();
+
+
+    if (!response.ok) {
+
+      throw new Error(
+        data.error ||
+        "Unable to delete memory"
+      );
+
+    }
+
+
+    await loadMemories();
+
+
+  } catch (error) {
+
+    alert(
+      "Couldn't delete memory: " +
+      error.message
+    );
+
+  }
+
+}
+
+
+// --------------------------------------------------
+// MEMORY PANEL
+// --------------------------------------------------
+
+function toggleMemoryPanel() {
+
+  const panel =
+    document.getElementById(
+      "memoryPanel"
+    );
+
+
+  if (
+    panel.style.display ===
+    "block"
+  ) {
+
+    panel.style.display =
+      "none";
+
+  } else {
+
+    panel.style.display =
+      "block";
+
+    loadMemories();
+
+  }
 
 }
 
