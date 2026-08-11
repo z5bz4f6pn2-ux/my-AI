@@ -88,6 +88,8 @@
 </div>
 
 <script>
+let conversationHistory = [];
+
 async function sendMessage() {
 
   const input = document.getElementById("message");
@@ -120,7 +122,8 @@ async function sendMessage() {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        message: message
+        message: message,
+        history: conversationHistory
       })
     });
 
@@ -130,8 +133,19 @@ async function sendMessage() {
       throw new Error(data.error || "Something went wrong");
     }
 
-    aiMessage.textContent =
-      data.response || data.result || "I couldn't generate a response.";
+    const reply = data.response || "I couldn't generate a response.";
+
+    aiMessage.textContent = reply;
+
+    conversationHistory.push({
+      role: "user",
+      content: message
+    });
+
+    conversationHistory.push({
+      role: "assistant",
+      content: reply
+    });
 
   } catch (error) {
 
@@ -143,6 +157,7 @@ async function sendMessage() {
   chat.scrollTop = chat.scrollHeight;
 }
 </script>
+    
 
 </body>
 </html>
