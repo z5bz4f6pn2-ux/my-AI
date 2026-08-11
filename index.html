@@ -5,6 +5,7 @@
   <title>My AI</title>
 
   <style>
+
     * {
       box-sizing: border-box;
     }
@@ -14,7 +15,12 @@
       background: #111;
       color: white;
       font-family: Arial, sans-serif;
+      overflow: hidden;
     }
+
+    /* ================================================
+       HEADER
+       ================================================ */
 
     header {
       height: 60px;
@@ -23,6 +29,9 @@
       align-items: center;
       justify-content: space-between;
       border-bottom: 1px solid #333;
+      position: relative;
+      z-index: 20;
+      background: #111;
     }
 
     .title {
@@ -49,18 +58,56 @@
       background: #333;
     }
 
+
+    /* ================================================
+       MAIN LAYOUT
+       ================================================ */
+
     #layout {
-      display: flex;
       height: calc(100vh - 60px);
+      position: relative;
     }
 
-    #sidebar {
-      width: 250px;
-      border-right: 1px solid #333;
-      padding: 15px;
-      overflow-y: auto;
-      background: #151515;
+    #main {
+      width: 100%;
+      height: 100%;
+      position: relative;
     }
+
+
+    /* ================================================
+       SLIDE-OUT SIDEBAR
+       ================================================ */
+
+    #sidebar {
+      position: fixed;
+      top: 60px;
+      left: 0;
+      bottom: 0;
+
+      width: 300px;
+
+      padding: 15px;
+
+      background: #151515;
+
+      border-right: 1px solid #333;
+
+      overflow-y: auto;
+
+      z-index: 50;
+
+      transform: translateX(-100%);
+
+      transition: transform 0.2s ease;
+
+      box-shadow: 10px 0 30px rgba(0,0,0,0.4);
+    }
+
+    #sidebar.open {
+      transform: translateX(0);
+    }
+
 
     .sidebar-title {
       font-size: 14px;
@@ -69,15 +116,53 @@
       text-transform: uppercase;
     }
 
+
+    /* ================================================
+       SIDEBAR OVERLAY
+       ================================================ */
+
+    #sidebarOverlay {
+      display: none;
+
+      position: fixed;
+
+      top: 60px;
+      left: 0;
+      right: 0;
+      bottom: 0;
+
+      background: rgba(0,0,0,0.45);
+
+      z-index: 40;
+    }
+
+    #sidebarOverlay.show {
+      display: block;
+    }
+
+
+    /* ================================================
+       CHAT ITEMS
+       ================================================ */
+
     .chat-item {
-      padding: 12px;
-      margin-bottom: 8px;
+      display: flex;
+
+      align-items: center;
+
+      gap: 6px;
+
+      padding: 8px;
+
+      margin-bottom: 7px;
+
       border-radius: 10px;
+
       background: #222;
+
       cursor: pointer;
+
       overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
     }
 
     .chat-item:hover {
@@ -88,149 +173,279 @@
       background: #2675ff;
     }
 
-    #main {
+
+    .chat-title {
       flex: 1;
-      position: relative;
+
       min-width: 0;
+
+      padding: 5px;
+
+      white-space: nowrap;
+
+      overflow: hidden;
+
+      text-overflow: ellipsis;
     }
+
+
+    .chat-action {
+      flex-shrink: 0;
+
+      border: none;
+
+      border-radius: 8px;
+
+      padding: 6px 7px;
+
+      background: transparent;
+
+      color: #aaa;
+
+      cursor: pointer;
+
+      font-size: 13px;
+    }
+
+    .chat-action:hover {
+      background: rgba(255,255,255,0.12);
+
+      color: white;
+    }
+
+
+    .delete-chat:hover {
+      background: #662222;
+
+      color: #ffb0b0;
+    }
+
+
+    /* ================================================
+       CHAT AREA
+       ================================================ */
 
     #chat {
       padding: 15px;
+
       height: calc(100vh - 150px);
+
       overflow-y: auto;
     }
 
+
     .message {
       padding: 12px;
+
       margin: 10px 0;
+
       border-radius: 15px;
+
       max-width: 80%;
+
       white-space: pre-wrap;
+
       word-wrap: break-word;
     }
 
+
     .user {
       background: #2675ff;
+
       margin-left: auto;
     }
+
 
     .ai {
       background: #333;
     }
 
+
+    /* ================================================
+       INPUT
+       ================================================ */
+
     .input-area {
       position: absolute;
+
       bottom: 0;
+
       left: 0;
+
       right: 0;
+
       padding: 10px;
+
       background: #111;
+
       display: flex;
+
       gap: 8px;
     }
 
+
     input {
       flex: 1;
+
       padding: 12px;
+
       border-radius: 20px;
+
       border: 1px solid #555;
+
       background: #222;
+
       color: white;
+
       font-size: 16px;
+
       outline: none;
     }
+
 
     input:focus {
       border-color: #2675ff;
     }
 
+
     button {
       border: none;
+
       border-radius: 20px;
+
       padding: 12px 16px;
+
       font-weight: bold;
+
       cursor: pointer;
     }
 
+
     .send-button {
       background: white;
+
       color: black;
     }
 
-    /* MEMORY PANEL */
+
+    /* ================================================
+       MEMORY PANEL
+       ================================================ */
 
     #memoryPanel {
       display: none;
+
       position: fixed;
+
       top: 60px;
+
       right: 20px;
+
       width: 350px;
+
       max-height: 70vh;
+
       overflow-y: auto;
+
       background: #1b1b1b;
+
       border: 1px solid #444;
+
       border-radius: 15px;
+
       padding: 18px;
+
       z-index: 100;
+
       box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }
 
+
     #memoryPanel h2 {
       margin-top: 0;
+
       margin-bottom: 5px;
     }
 
+
     .memory-description {
       color: #999;
+
       font-size: 13px;
+
       margin-bottom: 15px;
     }
 
+
     .memory-item {
       background: #252525;
+
       border-radius: 10px;
+
       padding: 12px;
+
       margin-bottom: 10px;
     }
+
 
     .memory-text {
       margin-bottom: 10px;
+
       line-height: 1.4;
     }
 
+
     .delete-memory {
       background: #442222;
+
       color: #ffb0b0;
+
       padding: 7px 11px;
+
       border-radius: 15px;
+
       font-size: 12px;
     }
+
 
     .delete-memory:hover {
       background: #662222;
     }
 
+
     .close-memory {
       background: #333;
+
       color: white;
+
       float: right;
+
       padding: 6px 10px;
     }
 
+
     .no-memories {
       color: #888;
+
       padding: 10px 0;
     }
+
+
+    /* ================================================
+       MOBILE
+       ================================================ */
 
     @media (max-width: 700px) {
 
       #sidebar {
-        width: 190px;
+        width: 280px;
       }
 
       #memoryPanel {
         left: 10px;
+
         right: 10px;
+
         width: auto;
       }
 
@@ -242,11 +457,18 @@
         font-size: 20px;
       }
 
+      .header-button {
+        padding: 8px 10px;
+      }
+
     }
+
   </style>
 </head>
 
+
 <body>
+
 
 <header>
 
@@ -254,7 +476,16 @@
     My AI
   </div>
 
+
   <div class="header-buttons">
+
+    <button
+      class="header-button"
+      onclick="toggleSidebar()"
+    >
+      ☰ Chats
+    </button>
+
 
     <button
       class="header-button"
@@ -262,6 +493,7 @@
     >
       🧠 Memory
     </button>
+
 
     <button
       class="header-button"
@@ -293,6 +525,14 @@
   </aside>
 
 
+  <!-- SIDEBAR OVERLAY -->
+
+  <div
+    id="sidebarOverlay"
+    onclick="closeSidebar()"
+  ></div>
+
+
   <!-- MAIN CHAT -->
 
   <main id="main">
@@ -314,6 +554,7 @@
         placeholder="Talk to me..."
         autocomplete="off"
       >
+
 
       <button
         class="send-button"
@@ -340,11 +581,16 @@
     ✕
   </button>
 
-  <h2>My Memories</h2>
+
+  <h2>
+    My Memories
+  </h2>
+
 
   <div class="memory-description">
     These are the things My AI has permanently remembered.
   </div>
+
 
   <div id="memoryList">
     Loading...
@@ -355,14 +601,81 @@
 
 <script>
 
+
 let conversationHistory = [];
 
 let conversationId = null;
 
 
-// --------------------------------------------------
-// LOAD CONVERSATIONS
-// --------------------------------------------------
+/* ==================================================
+   SIDEBAR
+   ================================================== */
+
+function toggleSidebar() {
+
+  const sidebar =
+    document.getElementById(
+      "sidebar"
+    );
+
+  const overlay =
+    document.getElementById(
+      "sidebarOverlay"
+    );
+
+
+  const isOpen =
+    sidebar.classList.contains(
+      "open"
+    );
+
+
+  if (isOpen) {
+
+    closeSidebar();
+
+  } else {
+
+    sidebar.classList.add(
+      "open"
+    );
+
+    overlay.classList.add(
+      "show"
+    );
+
+    loadConversations();
+
+  }
+
+}
+
+
+function closeSidebar() {
+
+  document
+    .getElementById(
+      "sidebar"
+    )
+    .classList.remove(
+      "open"
+    );
+
+
+  document
+    .getElementById(
+      "sidebarOverlay"
+    )
+    .classList.remove(
+      "show"
+    );
+
+}
+
+
+/* ==================================================
+   LOAD CONVERSATIONS
+   ================================================== */
 
 async function loadConversations() {
 
@@ -371,6 +684,7 @@ async function loadConversations() {
       "conversationList"
     );
 
+
   try {
 
     const response =
@@ -378,15 +692,18 @@ async function loadConversations() {
         "/api/conversations"
       );
 
+
     const data =
       await response.json();
 
 
     if (!response.ok) {
+
       throw new Error(
         data.error ||
         "Unable to load conversations"
       );
+
     }
 
 
@@ -431,15 +748,107 @@ async function loadConversations() {
         }
 
 
-        item.textContent =
+        const title =
+          document.createElement(
+            "div"
+          );
+
+
+        title.className =
+          "chat-title";
+
+
+        title.textContent =
           conversation.title ||
           "New Chat";
 
 
-        item.onclick = () =>
-          loadConversation(
-            conversation.id
+        title.onclick =
+          () =>
+            loadConversation(
+              conversation.id
+            );
+
+
+        /* RENAME */
+
+        const renameButton =
+          document.createElement(
+            "button"
           );
+
+
+        renameButton.className =
+          "chat-action";
+
+
+        renameButton.textContent =
+          "✏️";
+
+
+        renameButton.title =
+          "Rename";
+
+
+        renameButton.onclick =
+          event => {
+
+            event.stopPropagation();
+
+            renameConversation(
+              conversation.id,
+              conversation.title ||
+              "New Chat"
+            );
+
+          };
+
+
+        /* DELETE */
+
+        const deleteButton =
+          document.createElement(
+            "button"
+          );
+
+
+        deleteButton.className =
+          "chat-action delete-chat";
+
+
+        deleteButton.textContent =
+          "🗑️";
+
+
+        deleteButton.title =
+          "Delete";
+
+
+        deleteButton.onclick =
+          event => {
+
+            event.stopPropagation();
+
+            deleteConversation(
+              conversation.id
+            );
+
+          };
+
+
+        item.appendChild(
+          title
+        );
+
+
+        item.appendChild(
+          renameButton
+        );
+
+
+        item.appendChild(
+          deleteButton
+        );
 
 
         list.appendChild(
@@ -462,9 +871,9 @@ async function loadConversations() {
 }
 
 
-// --------------------------------------------------
-// LOAD ONE CONVERSATION
-// --------------------------------------------------
+/* ==================================================
+   LOAD ONE CONVERSATION
+   ================================================== */
 
 async function loadConversation(id) {
 
@@ -482,10 +891,12 @@ async function loadConversation(id) {
 
 
     if (!response.ok) {
+
       throw new Error(
         data.error ||
         "Unable to load conversation"
       );
+
     }
 
 
@@ -553,6 +964,9 @@ async function loadConversation(id) {
     loadConversations();
 
 
+    closeSidebar();
+
+
     document
       .getElementById(
         "message"
@@ -573,9 +987,172 @@ async function loadConversation(id) {
 }
 
 
-// --------------------------------------------------
-// SEND MESSAGE
-// --------------------------------------------------
+/* ==================================================
+   RENAME CONVERSATION
+   ================================================== */
+
+async function renameConversation(
+  id,
+  currentTitle
+) {
+
+  const newTitle =
+    prompt(
+      "Rename conversation:",
+      currentTitle
+    );
+
+
+  if (
+    newTitle === null
+  ) {
+    return;
+  }
+
+
+  const title =
+    newTitle.trim();
+
+
+  if (!title) {
+    return;
+  }
+
+
+  try {
+
+    const response =
+      await fetch(
+        "/api/conversations/" +
+        id,
+        {
+
+          method:
+            "PATCH",
+
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
+
+          body:
+            JSON.stringify({
+              title
+            })
+
+        }
+      );
+
+
+    const data =
+      await response.json();
+
+
+    if (!response.ok) {
+
+      throw new Error(
+        data.error ||
+        "Unable to rename conversation"
+      );
+
+    }
+
+
+    await loadConversations();
+
+
+  } catch (error) {
+
+    alert(
+      "Couldn't rename chat: " +
+      error.message
+    );
+
+  }
+
+}
+
+
+/* ==================================================
+   DELETE CONVERSATION
+   ================================================== */
+
+async function deleteConversation(id) {
+
+  try {
+
+    const response =
+      await fetch(
+        "/api/conversations/" +
+        id,
+        {
+          method:
+            "DELETE"
+        }
+      );
+
+
+    const data =
+      await response.json();
+
+
+    if (!response.ok) {
+
+      throw new Error(
+        data.error ||
+        "Unable to delete conversation"
+      );
+
+    }
+
+
+    /* If the deleted chat was open,
+       start a fresh chat */
+
+    if (
+      String(conversationId) ===
+      String(id)
+    ) {
+
+      conversationHistory = [];
+
+      conversationId = null;
+
+
+      document.getElementById(
+        "chat"
+      ).innerHTML = `
+
+        <div class="message ai">
+
+          Hello 👋 I'm your AI assistant.
+          This is a new conversation.
+
+        </div>
+
+      `;
+
+    }
+
+
+    await loadConversations();
+
+
+  } catch (error) {
+
+    alert(
+      "Couldn't delete chat: " +
+      error.message
+    );
+
+  }
+
+}
+
+
+/* ==================================================
+   SEND MESSAGE
+   ================================================== */
 
 async function sendMessage() {
 
@@ -595,7 +1172,9 @@ async function sendMessage() {
     input.value.trim();
 
 
-  if (message === "") {
+  if (
+    message === ""
+  ) {
     return;
   }
 
@@ -760,9 +1339,9 @@ async function sendMessage() {
 }
 
 
-// --------------------------------------------------
-// NEW CHAT
-// --------------------------------------------------
+/* ==================================================
+   NEW CHAT
+   ================================================== */
 
 function newChat() {
 
@@ -792,6 +1371,9 @@ function newChat() {
   loadConversations();
 
 
+  closeSidebar();
+
+
   document
     .getElementById(
       "message"
@@ -801,9 +1383,9 @@ function newChat() {
 }
 
 
-// --------------------------------------------------
-// LOAD MEMORIES
-// --------------------------------------------------
+/* ==================================================
+   LOAD MEMORIES
+   ================================================== */
 
 async function loadMemories() {
 
@@ -898,10 +1480,11 @@ async function loadMemories() {
           "Delete";
 
 
-        deleteButton.onclick = () =>
-          deleteMemory(
-            memory.id
-          );
+        deleteButton.onclick =
+          () =>
+            deleteMemory(
+              memory.id
+            );
 
 
         item.appendChild(
@@ -936,9 +1519,9 @@ async function loadMemories() {
 }
 
 
-// --------------------------------------------------
-// DELETE MEMORY
-// --------------------------------------------------
+/* ==================================================
+   DELETE MEMORY
+   ================================================== */
 
 async function deleteMemory(id) {
 
@@ -995,9 +1578,9 @@ async function deleteMemory(id) {
 }
 
 
-// --------------------------------------------------
-// MEMORY PANEL
-// --------------------------------------------------
+/* ==================================================
+   MEMORY PANEL
+   ================================================== */
 
 function toggleMemoryPanel() {
 
@@ -1027,9 +1610,9 @@ function toggleMemoryPanel() {
 }
 
 
-// --------------------------------------------------
-// ENTER KEY
-// --------------------------------------------------
+/* ==================================================
+   ENTER KEY
+   ================================================== */
 
 const messageInput =
   document.getElementById(
@@ -1056,9 +1639,9 @@ messageInput.addEventListener(
 );
 
 
-// --------------------------------------------------
-// START
-// --------------------------------------------------
+/* ==================================================
+   START
+   ================================================== */
 
 loadConversations();
 
