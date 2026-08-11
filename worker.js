@@ -1,9 +1,101 @@
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const userId = "default-user";
 
-    if (url.pathname === "/api/chat" && request.method === "POST") {
+    // --------------------------------------------------
+    // GET SAVED CONVERSATIONS
+    // --------------------------------------------------
+
+    if (
+      url.pathname === "/api/conversations" &&
+      request.method === "GET"
+    ) {
       try {
+        const result = await env.DB
+          .prepare(`
+            SELECT id, title, created_at, updated_at
+            FROM conversations
+            WHERE user_id = ?
+            ORDER BY updated_at DESC
+          `)
+          .bind(userId)
+          .all();
+
+        return Response.json({
+          conversations: result.results || []
+        });
+
+      } catch (error) {
+        return Response.json(
+          { error: error.message },
+          { status: 500 }
+        );
+      }
+    }
+
+
+    // --------------------------------------------------
+    // GET ONE SAVED CONVERSATION
+    // --------------------------------------------------
+
+    if (
+      url.pathname.startsWith("/api/conversations/") &&
+      request.method === "GET"
+    ) {
+      try {
+        const id = url.pathname.split("/").pop();
+
+        const conversation = await env.DB
+          .prepare(`
+            SELECT id, title, created_at, updated_at
+            FROM conversations
+            WHERE id = ? AND user_id = ?
+          `)
+          .bind(id, userId)
+          .first();
+
+        if (!conversation) {
+          return Response.json(
+            { error: "Conversation not found" },
+            { status: 404 }
+          );
+        }
+
+        const messages = await env.DB
+          .prepare(`
+            SELECT role, content, created_at
+            FROM messages
+            WHERE conversation_id = ?
+            ORDER BY id ASC
+          `)
+          .bind(id)
+          .all();
+
+        return Response.json({
+          conversation,
+          messages: messages.results || []
+        });
+
+      } catch (error) {
+        return Response.json(
+          { error: error.message },
+          { status: 500 }
+        );
+      }
+    }
+
+
+    // --------------------------------------------------
+    // CHAT
+    // --------------------------------------------------
+
+    if (
+      url.pathname === "/api/chat" &&
+      request.method === "POST"
+    ) {
+      try {
+
         const {
           message,
           history = [],
@@ -17,35 +109,38 @@ export default {
           );
         }
 
-        const userId = "default-user";
 
-        /*
-         * ---------------------------------------------------------
-         * 1. CREATE OR LOAD CONVERSATION
-         * ---------------------------------------------------------
-         */
+        // ----------------------------------------------
+        // CREATE OR LOAD CONVERSATION
+        // ----------------------------------------------
 
-        let currentConversationId = conversationId;
+        let currentConversationId =
+          conversationId;
 
         if (!currentConversationId) {
-          const conversation = await env.DB
-            .prepare(`
-              INSERT INTO conversations
-              (user_id, title)
-              VALUES (?, ?)
-              RETURNING id
-            `)
-            .bind(userId, "New Chat")
-            .first();
 
-          currentConversationId = conversation.id;
+          const conversation =
+            await env.DB
+              .prepare(`
+                INSERT INTO conversations
+                (user_id, title)
+                VALUES (?, ?)
+                RETURNING id
+              `)
+              .bind(
+                userId,
+                "New Chat"
+              )
+              .first();
+
+          currentConversationId =
+            conversation.id;
         }
 
-        /*
-         * ---------------------------------------------------------
-         * 2. SAVE USER MESSAGE
-         * ---------------------------------------------------------
-         */
+
+        // ----------------------------------------------
+        // SAVE USER MESSAGE
+        // ----------------------------------------------
 
         await env.DB
           .prepare(`
@@ -60,49 +155,50 @@ export default {
           )
           .run();
 
-        /*
-         * ---------------------------------------------------------
-         * 3. GET PERMANENT MEMORIES
-         * ---------------------------------------------------------
-         */
 
-        const memoryResult = await env.DB
-          .prepare(`
-            SELECT id, memory
-            FROM memories
-            WHERE user_id = ?
-            ORDER BY created_at DESC
-            LIMIT 30
-          `)
-          .bind(userId)
-          .all();
+        // ----------------------------------------------
+        // GET MEMORIES
+        // ----------------------------------------------
 
-        const memories = memoryResult.results || [];
+        const memoryResult =
+          await env.DB
+            .prepare(`
+              SELECT id, memory
+              FROM memories
+              WHERE user_id = ?
+              ORDER BY created_at DESC
+              LIMIT 30
+            `)
+            .bind(userId)
+            .all();
 
-        const memoryText = memories.length
-          ? memories
-              .map(row => `- ${row.memory}`)
-              .join("\n")
-          : "No permanent memories yet.";
+        const memories =
+          memoryResult.results || [];
 
-        /*
-         * ---------------------------------------------------------
-         * 4. CORRECT OBVIOUS SPEECH-TO-TEXT MISTAKES
-         * ---------------------------------------------------------
-         */
+        const memoryText =
+          memories.length
+            ? memories
+                .map(row => `- ${row.memory}`)
+                .join("\n")
+            : "No permanent memories yet.";
+
+
+        // ----------------------------------------------
+        // SPEECH-TO-TEXT CORRECTIONS
+        // ----------------------------------------------
 
         let understoodMessage = message;
 
-        understoodMessage = understoodMessage.replace(
-          /\bweather intelligence\b/gi,
-          "whether intelligence"
-        );
+        understoodMessage =
+          understoodMessage.replace(
+            /\bweather intelligence\b/gi,
+            "whether intelligence"
+          );
 
-        /*
-         * ---------------------------------------------------------
-         * 5. AI PERSONALITY
-         * ---------------------------------------------------------
-         */
+
+        // ----------------------------------------------
+        // AI SYSTEM PROMPT
+        // ----------------------------------------------
 
         const systemPrompt = `
 You are My AI.
@@ -110,47 +206,25 @@ You are My AI.
 You are a personal AI assistant designed for natural,
 intelligent and meaningful conversations.
 
-PERSONALITY
-
 Be friendly, intelligent, thoughtful, calm, honest and direct.
-
-You can use humour naturally when appropriate.
-
-Do not behave like a customer-service chatbot.
-
-CONVERSATION STYLE
 
 Talk naturally.
 
-Do not turn every answer into a numbered list.
+Do not behave like a customer-service chatbot.
 
-Do not write an essay when a short answer is enough.
+Do not automatically turn every answer into a numbered list.
 
-Match the length of your answer to the user's question.
-
-For casual conversation, be conversational.
-
-For simple questions, answer simply.
-
-For complicated questions, explain them properly.
+Match the length of your response to the user's message.
 
 Do not automatically ask a question at the end of every response.
 
-Only ask a follow-up question when the user's request is genuinely
-unclear or a follow-up is actually necessary.
+Only ask a question when it is genuinely useful or necessary.
 
-Do not use filler such as:
-"That's a great question!"
-"Certainly!"
-"Of course!"
+Do not use unnecessary filler.
 
-Do not repeatedly tell the user that you are an AI.
+Do not repeatedly say you are an AI.
 
-Do not invent stories or unrelated information.
-
-Do not repeat information unnecessarily.
-
-REASONING
+Do not invent information.
 
 Do not simply agree with everything the user says.
 
@@ -158,48 +232,26 @@ If the user is wrong, explain why respectfully.
 
 If something is uncertain, say so.
 
-For subjective questions, give a reasoned opinion.
+IMPORTANT MEMORY RULE:
 
-Focus on what the user is actually asking.
+Only use a saved memory when it is genuinely relevant.
 
-IMPORTANT MEMORY RULE
+Do not invent connections between unrelated memories and the
+current conversation.
 
-Do not invent connections between the user's current question
-and their memories.
-
-A memory should only be mentioned when it is clearly relevant.
-
-For example, knowing that the user wants to learn Spanish does NOT
-mean that an unrelated question is about Spanish.
-
-Do not claim the user has mentioned something before unless it
-actually appears in the conversation history or permanent memory.
-
-PERMANENT MEMORY
-
-These are the user's saved memories:
+PERMANENT MEMORY:
 
 ${memoryText}
 
-Use them naturally when genuinely relevant.
+CURRENT USER MESSAGE:
 
-CONVERSATION HISTORY
-
-Use the recent conversation history to understand references,
-follow-up questions and pronouns.
-
-Do not allow unrelated previous conversations to override
-the meaning of the current question.
-
-Your goal is to have a natural, intelligent conversation rather
-than producing a generic AI essay.
+${understoodMessage}
 `;
 
-        /*
-         * ---------------------------------------------------------
-         * 6. GENERATE AI RESPONSE
-         * ---------------------------------------------------------
-         */
+
+        // ----------------------------------------------
+        // GENERATE RESPONSE
+        // ----------------------------------------------
 
         const messages = [
           {
@@ -213,23 +265,25 @@ than producing a generic AI essay.
           }
         ];
 
-        const result = await env.AI.run(
-          "@cf/meta/llama-3.1-8b-instruct-fast",
-          {
-            messages,
-            max_tokens: 512
-          }
-        );
+
+        const result =
+          await env.AI.run(
+            "@cf/meta/llama-3.1-8b-instruct-fast",
+            {
+              messages,
+              max_tokens: 512
+            }
+          );
+
 
         const response =
           result.response ||
           "I couldn't generate a response.";
 
-        /*
-         * ---------------------------------------------------------
-         * 7. SAVE AI RESPONSE
-         * ---------------------------------------------------------
-         */
+
+        // ----------------------------------------------
+        // SAVE AI RESPONSE
+        // ----------------------------------------------
 
         await env.DB
           .prepare(`
@@ -244,11 +298,10 @@ than producing a generic AI essay.
           )
           .run();
 
-        /*
-         * ---------------------------------------------------------
-         * 8. UPDATE CONVERSATION TIMESTAMP
-         * ---------------------------------------------------------
-         */
+
+        // ----------------------------------------------
+        // UPDATE CONVERSATION
+        // ----------------------------------------------
 
         await env.DB
           .prepare(`
@@ -259,73 +312,79 @@ than producing a generic AI essay.
           .bind(currentConversationId)
           .run();
 
-        /*
-         * ---------------------------------------------------------
-         * 9. MEMORY EXTRACTION
-         * ---------------------------------------------------------
-         */
 
-        const memoryCheck = await env.AI.run(
-          "@cf/meta/llama-3.1-8b-instruct-fast",
-          {
-            messages: [
-              {
-                role: "system",
-                content: `
+        // ----------------------------------------------
+        // MEMORY EXTRACTION
+        // ----------------------------------------------
+
+        const memoryCheck =
+          await env.AI.run(
+            "@cf/meta/llama-3.1-8b-instruct-fast",
+            {
+              messages: [
+                {
+                  role: "system",
+                  content: `
 You are the permanent memory system for My AI.
 
-Decide whether the user's message contains useful personal
-information that should be remembered for future conversations.
+Save only useful long-term personal information.
 
-Useful memories include:
-- Personal preferences
+Examples:
 - Favourite things
+- Personal preferences
 - Goals
 - Hobbies
-- Languages they want to learn
+- Languages the user wants to learn
 - Important projects
 - Names
-- Other long-term information
+- Other information that would genuinely help later
 
 Do NOT save:
 - Ordinary questions
 - General knowledge
 - Temporary conversation
 - One-off calculations
-- Random statements unlikely to matter later
+- Random statements
 
 Never invent information.
 
-If there is something genuinely useful to remember, reply:
+If useful information exists:
 
 YES: [specific memory]
 
-Otherwise reply:
+Otherwise:
 
 NO
 `
-              },
-              {
-                role: "user",
-                content: message
-              }
-            ],
-            max_tokens: 150
-          }
-        );
+                },
+                {
+                  role: "user",
+                  content: message
+                }
+              ],
+              max_tokens: 150
+            }
+          );
+
 
         const memoryDecision =
-          (memoryCheck.response || "").trim();
+          (memoryCheck.response || "")
+            .trim();
+
 
         if (
           memoryDecision
             .toUpperCase()
             .startsWith("YES:")
         ) {
+
           const memory =
-            memoryDecision.substring(4).trim();
+            memoryDecision
+              .substring(4)
+              .trim();
 
           if (memory.length > 0) {
+
             await env.DB
               .prepare(`
                 INSERT INTO memories
@@ -340,16 +399,13 @@ NO
           }
         }
 
-        /*
-         * ---------------------------------------------------------
-         * 10. RETURN RESPONSE
-         * ---------------------------------------------------------
-         */
 
         return Response.json({
           response,
-          conversationId: currentConversationId
+          conversationId:
+            currentConversationId
         });
+
 
       } catch (error) {
 
@@ -365,6 +421,7 @@ NO
         );
       }
     }
+
 
     return env.ASSETS.fetch(request);
   }
