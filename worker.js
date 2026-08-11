@@ -2,16 +2,101 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const userId = "default-user";
-        // --------------------------------------------------
+
+    // ==================================================
+    // RENAME CONVERSATION
+    // ==================================================
+
+    if (
+      url.pathname.startsWith("/api/conversations/") &&
+      request.method === "PATCH"
+    ) {
+      try {
+        const id = url.pathname.split("/").pop();
+        const { title } = await request.json();
+
+        if (!title || !title.trim()) {
+          return Response.json(
+            { error: "Title cannot be empty" },
+            { status: 400 }
+          );
+        }
+
+        await env.DB
+          .prepare(`
+            UPDATE conversations
+            SET title = ?, updated_at = current_timestamp
+            WHERE id = ? AND user_id = ?
+          `)
+          .bind(
+            title.trim().substring(0, 80),
+            id,
+            userId
+          )
+          .run();
+
+        return Response.json({
+          success: true
+        });
+
+      } catch (error) {
+        return Response.json(
+          { error: error.message },
+          { status: 500 }
+        );
+      }
+    }
+
+
+    // ==================================================
+    // DELETE CONVERSATION
+    // ==================================================
+
+    if (
+      url.pathname.startsWith("/api/conversations/") &&
+      request.method === "DELETE"
+    ) {
+      try {
+        const id = url.pathname.split("/").pop();
+
+        await env.DB
+          .prepare(`
+            DELETE FROM messages
+            WHERE conversation_id = ?
+          `)
+          .bind(id)
+          .run();
+
+        await env.DB
+          .prepare(`
+            DELETE FROM conversations
+            WHERE id = ? AND user_id = ?
+          `)
+          .bind(id, userId)
+          .run();
+
+        return Response.json({
+          success: true
+        });
+
+      } catch (error) {
+        return Response.json(
+          { error: error.message },
+          { status: 500 }
+        );
+      }
+    }
+
+
+    // ==================================================
     // GET SAVED MEMORIES
-    // --------------------------------------------------
+    // ==================================================
 
     if (
       url.pathname === "/api/memories" &&
       request.method === "GET"
     ) {
       try {
-
         const result =
           await env.DB
             .prepare(`
@@ -24,41 +109,29 @@ export default {
             .all();
 
         return Response.json({
-          memories:
-            result.results || []
+          memories: result.results || []
         });
 
       } catch (error) {
-
         return Response.json(
-          {
-            error:
-              error.message
-          },
-          {
-            status: 500
-          }
+          { error: error.message },
+          { status: 500 }
         );
-
       }
     }
 
 
-    // --------------------------------------------------
+    // ==================================================
     // DELETE ONE MEMORY
-    // --------------------------------------------------
+    // ==================================================
 
     if (
       url.pathname.startsWith("/api/memories/") &&
       request.method === "DELETE"
     ) {
       try {
-
         const id =
-          url.pathname
-            .split("/")
-            .pop();
-
+          url.pathname.split("/").pop();
 
         await env.DB
           .prepare(`
@@ -71,47 +144,8 @@ export default {
           )
           .run();
 
-
         return Response.json({
           success: true
-        });
-
-      } catch (error) {
-
-        return Response.json(
-          {
-            error:
-              error.message
-          },
-          {
-            status: 500
-          }
-        );
-
-      }
-    }
-
-    // --------------------------------------------------
-    // GET SAVED CONVERSATIONS
-    // --------------------------------------------------
-
-    if (
-      url.pathname === "/api/conversations" &&
-      request.method === "GET"
-    ) {
-      try {
-        const result = await env.DB
-          .prepare(`
-            SELECT id, title, created_at, updated_at
-            FROM conversations
-            WHERE user_id = ?
-            ORDER BY updated_at DESC
-          `)
-          .bind(userId)
-          .all();
-
-        return Response.json({
-          conversations: result.results || []
         });
 
       } catch (error) {
@@ -123,9 +157,43 @@ export default {
     }
 
 
-    // --------------------------------------------------
-    // GET ONE SAVED CONVERSATION
-    // --------------------------------------------------
+    // ==================================================
+    // GET ALL CONVERSATIONS
+    // ==================================================
+
+    if (
+      url.pathname === "/api/conversations" &&
+      request.method === "GET"
+    ) {
+      try {
+        const result =
+          await env.DB
+            .prepare(`
+              SELECT id, title, created_at, updated_at
+              FROM conversations
+              WHERE user_id = ?
+              ORDER BY updated_at DESC
+            `)
+            .bind(userId)
+            .all();
+
+        return Response.json({
+          conversations:
+            result.results || []
+        });
+
+      } catch (error) {
+        return Response.json(
+          { error: error.message },
+          { status: 500 }
+        );
+      }
+    }
+
+
+    // ==================================================
+    // GET ONE CONVERSATION
+    // ==================================================
 
     if (
       url.pathname.startsWith("/api/conversations/") &&
@@ -142,7 +210,10 @@ export default {
               FROM conversations
               WHERE id = ? AND user_id = ?
             `)
-            .bind(id, userId)
+            .bind(
+              id,
+              userId
+            )
             .first();
 
         if (!conversation) {
@@ -175,30 +246,22 @@ export default {
         });
 
       } catch (error) {
-
         return Response.json(
-          {
-            error:
-              error.message
-          },
-          {
-            status: 500
-          }
+          { error: error.message },
+          { status: 500 }
         );
-
       }
     }
 
 
-    // --------------------------------------------------
+    // ==================================================
     // CHAT
-    // --------------------------------------------------
+    // ==================================================
 
     if (
       url.pathname === "/api/chat" &&
       request.method === "POST"
     ) {
-
       try {
 
         const {
@@ -207,9 +270,7 @@ export default {
           conversationId = null
         } = await request.json();
 
-
         if (!message) {
-
           return Response.json(
             {
               error:
@@ -219,7 +280,6 @@ export default {
               status: 400
             }
           );
-
         }
 
 
@@ -229,7 +289,6 @@ export default {
 
         let currentConversationId =
           conversationId;
-
 
         if (!currentConversationId) {
 
@@ -247,10 +306,8 @@ export default {
               )
               .first();
 
-
           currentConversationId =
             conversation.id;
-
         }
 
 
@@ -288,10 +345,8 @@ export default {
             .bind(userId)
             .all();
 
-
         const memories =
           memoryResult.results || [];
-
 
         const memoryText =
           memories.length
@@ -311,7 +366,6 @@ export default {
         let understoodMessage =
           message;
 
-
         understoodMessage =
           understoodMessage.replace(
             /\bweather intelligence\b/gi,
@@ -320,7 +374,7 @@ export default {
 
 
         // ----------------------------------------------
-        // AI SYSTEM PROMPT
+        // SYSTEM PROMPT
         // ----------------------------------------------
 
         const systemPrompt = `
@@ -359,8 +413,8 @@ IMPORTANT MEMORY RULE:
 
 Only use a saved memory when it is genuinely relevant.
 
-Do not invent connections between unrelated memories and the
-current conversation.
+Do not invent connections between unrelated memories and
+the current conversation.
 
 PERMANENT MEMORY:
 
@@ -373,15 +427,13 @@ ${understoodMessage}
 
 
         // ----------------------------------------------
-        // GENERATE AI RESPONSE
+        // GENERATE RESPONSE
         // ----------------------------------------------
 
         const messages = [
-
           {
             role:
               "system",
-
             content:
               systemPrompt
           },
@@ -391,11 +443,9 @@ ${understoodMessage}
           {
             role:
               "user",
-
             content:
               understoodMessage
           }
-
         ];
 
 
@@ -433,7 +483,7 @@ ${understoodMessage}
 
 
         // ----------------------------------------------
-        // UPDATE TIME
+        // UPDATE CONVERSATION TIME
         // ----------------------------------------------
 
         await env.DB
@@ -450,7 +500,7 @@ ${understoodMessage}
 
 
         // ----------------------------------------------
-        // AUTOMATIC CHAT TITLE
+        // AUTOMATIC TITLE
         // ----------------------------------------------
 
         const existingConversation =
@@ -479,6 +529,7 @@ ${understoodMessage}
                 "@cf/meta/llama-3.1-8b-instruct-fast",
                 {
                   messages: [
+
                     {
                       role:
                         "system",
@@ -503,6 +554,7 @@ Rules:
                       content:
                         message
                     }
+
                   ],
 
                   max_tokens: 30
@@ -519,8 +571,14 @@ Rules:
 
             title =
               title
-                .replace(/^["']|["']$/g, "")
-                .replace(/\n/g, " ")
+                .replace(
+                  /^["']|["']$/g,
+                  ""
+                )
+                .replace(
+                  /\n/g,
+                  " "
+                )
                 .trim();
 
 
@@ -615,7 +673,6 @@ NO
               ],
 
               max_tokens: 150
-
             }
           );
 
@@ -661,7 +718,7 @@ NO
 
 
         // ----------------------------------------------
-        // RETURN
+        // RETURN RESPONSE
         // ----------------------------------------------
 
         return Response.json({
@@ -678,28 +735,25 @@ NO
 
         console.error(error);
 
-
         return Response.json(
-
           {
             error:
               error.message
           },
-
           {
             status: 500
           }
-
         );
 
       }
-
     }
 
 
-    return env.ASSETS.fetch(
-      request
-    );
+    // ==================================================
+    // ASSETS
+    // ==================================================
+
+    return env.ASSETS.fetch(request);
 
   }
 };
