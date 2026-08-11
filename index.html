@@ -166,13 +166,13 @@ async function sendMessage() {
 
 
 // Press Enter to send
-document.getElementById("message").addEventListener("keydown", function(event) {
+const messageInput = document.getElementById("message");
 
+messageInput.addEventListener("keydown", function(event) {
   if (event.key === "Enter") {
     event.preventDefault();
     sendMessage();
   }
-
 });
 
 </script>
