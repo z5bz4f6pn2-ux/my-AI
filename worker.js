@@ -44,44 +44,60 @@ export default {
       request.method === "GET"
     ) {
       try {
-        const id = url.pathname.split("/").pop();
+        const id =
+          url.pathname.split("/").pop();
 
-        const conversation = await env.DB
-          .prepare(`
-            SELECT id, title, created_at, updated_at
-            FROM conversations
-            WHERE id = ? AND user_id = ?
-          `)
-          .bind(id, userId)
-          .first();
+        const conversation =
+          await env.DB
+            .prepare(`
+              SELECT id, title, created_at, updated_at
+              FROM conversations
+              WHERE id = ? AND user_id = ?
+            `)
+            .bind(id, userId)
+            .first();
 
         if (!conversation) {
           return Response.json(
-            { error: "Conversation not found" },
-            { status: 404 }
+            {
+              error:
+                "Conversation not found"
+            },
+            {
+              status: 404
+            }
           );
         }
 
-        const messages = await env.DB
-          .prepare(`
-            SELECT role, content, created_at
-            FROM messages
-            WHERE conversation_id = ?
-            ORDER BY id ASC
-          `)
-          .bind(id)
-          .all();
+        const messages =
+          await env.DB
+            .prepare(`
+              SELECT role, content, created_at
+              FROM messages
+              WHERE conversation_id = ?
+              ORDER BY id ASC
+            `)
+            .bind(id)
+            .all();
 
         return Response.json({
           conversation,
-          messages: messages.results || []
+          messages:
+            messages.results || []
         });
 
       } catch (error) {
+
         return Response.json(
-          { error: error.message },
-          { status: 500 }
+          {
+            error:
+              error.message
+          },
+          {
+            status: 500
+          }
         );
+
       }
     }
 
@@ -94,6 +110,7 @@ export default {
       url.pathname === "/api/chat" &&
       request.method === "POST"
     ) {
+
       try {
 
         const {
@@ -102,11 +119,19 @@ export default {
           conversationId = null
         } = await request.json();
 
+
         if (!message) {
+
           return Response.json(
-            { error: "Missing message" },
-            { status: 400 }
+            {
+              error:
+                "Missing message"
+            },
+            {
+              status: 400
+            }
           );
+
         }
 
 
@@ -116,6 +141,7 @@ export default {
 
         let currentConversationId =
           conversationId;
+
 
         if (!currentConversationId) {
 
@@ -133,8 +159,10 @@ export default {
               )
               .first();
 
+
           currentConversationId =
             conversation.id;
+
         }
 
 
@@ -172,22 +200,29 @@ export default {
             .bind(userId)
             .all();
 
+
         const memories =
           memoryResult.results || [];
+
 
         const memoryText =
           memories.length
             ? memories
-                .map(row => `- ${row.memory}`)
+                .map(
+                  row =>
+                    `- ${row.memory}`
+                )
                 .join("\n")
             : "No permanent memories yet.";
 
 
         // ----------------------------------------------
-        // SPEECH-TO-TEXT CORRECTIONS
+        // SPEECH CORRECTION
         // ----------------------------------------------
 
-        let understoodMessage = message;
+        let understoodMessage =
+          message;
+
 
         understoodMessage =
           understoodMessage.replace(
@@ -250,19 +285,29 @@ ${understoodMessage}
 
 
         // ----------------------------------------------
-        // GENERATE RESPONSE
+        // GENERATE AI RESPONSE
         // ----------------------------------------------
 
         const messages = [
+
           {
-            role: "system",
-            content: systemPrompt
+            role:
+              "system",
+
+            content:
+              systemPrompt
           },
+
           ...history,
+
           {
-            role: "user",
-            content: understoodMessage
+            role:
+              "user",
+
+            content:
+              understoodMessage
           }
+
         ];
 
 
@@ -300,17 +345,127 @@ ${understoodMessage}
 
 
         // ----------------------------------------------
-        // UPDATE CONVERSATION
+        // UPDATE TIME
         // ----------------------------------------------
 
         await env.DB
           .prepare(`
             UPDATE conversations
-            SET updated_at = current_timestamp
+            SET updated_at =
+              current_timestamp
             WHERE id = ?
           `)
-          .bind(currentConversationId)
+          .bind(
+            currentConversationId
+          )
           .run();
+
+
+        // ----------------------------------------------
+        // AUTOMATIC CHAT TITLE
+        // ----------------------------------------------
+
+        const existingConversation =
+          await env.DB
+            .prepare(`
+              SELECT title
+              FROM conversations
+              WHERE id = ?
+            `)
+            .bind(
+              currentConversationId
+            )
+            .first();
+
+
+        if (
+          existingConversation &&
+          existingConversation.title ===
+            "New Chat"
+        ) {
+
+          try {
+
+            const titleResult =
+              await env.AI.run(
+                "@cf/meta/llama-3.1-8b-instruct-fast",
+                {
+                  messages: [
+                    {
+                      role:
+                        "system",
+
+                      content: `
+Create a very short title for this conversation.
+
+Rules:
+- Maximum 6 words.
+- Do not use quotation marks.
+- Do not say "Chat".
+- Do not say "Conversation".
+- Describe the main subject.
+- Do not invent information.
+`
+                    },
+
+                    {
+                      role:
+                        "user",
+
+                      content:
+                        message
+                    }
+                  ],
+
+                  max_tokens: 30
+                }
+              );
+
+
+            let title =
+              (
+                titleResult.response ||
+                ""
+              ).trim();
+
+
+            title =
+              title
+                .replace(/^["']|["']$/g, "")
+                .replace(/\n/g, " ")
+                .trim();
+
+
+            if (
+              title &&
+              title.length > 0 &&
+              title.length < 80
+            ) {
+
+              await env.DB
+                .prepare(`
+                  UPDATE conversations
+                  SET title = ?
+                  WHERE id = ?
+                `)
+                .bind(
+                  title,
+                  currentConversationId
+                )
+                .run();
+
+            }
+
+          } catch (titleError) {
+
+            console.error(
+              "Title error:",
+              titleError
+            );
+
+          }
+
+        }
 
 
         // ----------------------------------------------
@@ -322,8 +477,11 @@ ${understoodMessage}
             "@cf/meta/llama-3.1-8b-instruct-fast",
             {
               messages: [
+
                 {
-                  role: "system",
+                  role:
+                    "system",
+
                   content: `
 You are the permanent memory system for My AI.
 
@@ -357,19 +515,28 @@ Otherwise:
 NO
 `
                 },
+
                 {
-                  role: "user",
-                  content: message
+                  role:
+                    "user",
+
+                  content:
+                    message
                 }
+
               ],
+
               max_tokens: 150
+
             }
           );
 
 
         const memoryDecision =
-          (memoryCheck.response || "")
-            .trim();
+          (
+            memoryCheck.response ||
+            ""
+          ).trim();
 
 
         if (
@@ -383,7 +550,10 @@ NO
               .substring(4)
               .trim();
 
-          if (memory.length > 0) {
+
+          if (
+            memory.length > 0
+          ) {
 
             await env.DB
               .prepare(`
@@ -396,14 +566,23 @@ NO
                 memory
               )
               .run();
+
           }
+
         }
 
 
+        // ----------------------------------------------
+        // RETURN
+        // ----------------------------------------------
+
         return Response.json({
+
           response,
+
           conversationId:
             currentConversationId
+
         });
 
 
@@ -411,18 +590,28 @@ NO
 
         console.error(error);
 
+
         return Response.json(
+
           {
-            error: error.message
+            error:
+              error.message
           },
+
           {
             status: 500
           }
+
         );
+
       }
+
     }
 
 
-    return env.ASSETS.fetch(request);
+    return env.ASSETS.fetch(
+      request
+    );
+
   }
 };
