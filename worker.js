@@ -10,29 +10,43 @@ export default {
           return new Response("Missing message", { status: 400 });
         }
 
-        // Get saved memories
+        // Get existing permanent memories
         const memoryResult = await env.DB
           .prepare(
-            "SELECT memory FROM memories WHERE user_id = ? ORDER BY created_at DESC LIMIT 20"
+            "SELECT id, memory FROM memories WHERE user_id = ? ORDER BY created_at DESC LIMIT 30"
           )
           .bind("default-user")
           .all();
 
-        const memories = memoryResult.results
-          .map(row => row.memory)
-          .join("\n");
+        const memories = memoryResult.results || [];
+
+        const memoryText = memories.length
+          ? memories.map(row => `- ${row.memory}`).join("\n")
+          : "No permanent memories yet.";
 
         const systemPrompt = `
 You are My AI, a helpful, intelligent and natural AI assistant.
 
-Speak naturally and directly.
-Do not tell the user that you are "just a computer program" unless they specifically ask.
-Do not generate stories, random text or huge blocks of content unless the user asks for them.
-Answer the user's actual question.
-Be conversational and friendly.
+Your personality:
+- Friendly and conversational.
+- Intelligent and thoughtful.
+- Direct when answering questions.
+- Do not repeatedly say that you are a computer program.
+- Do not invent stories or unrelated information.
+- Do not produce huge walls of text unless the user asks for detail.
+- Answer what the user actually asked.
 
-Here are things you remember about the user:
-${memories || "Nothing has been permanently remembered yet."}
+PERMANENT MEMORY
+
+These are things you already know about the user:
+
+${memoryText}
+
+Use these memories naturally when they are relevant.
+
+IMPORTANT:
+Not everything the user says should be remembered permanently.
+Only save information that is genuinely useful for future conversations.
 `;
 
         const messages = [
@@ -47,35 +61,94 @@ ${memories || "Nothing has been permanently remembered yet."}
           }
         ];
 
+        // Generate the normal AI response
         const result = await env.AI.run(
           "@cf/meta/llama-3.1-8b-instruct-fast",
           {
-            messages: messages,
+            messages,
             max_tokens: 512
           }
         );
 
         const response = result.response || "";
 
-        // Look for simple things worth remembering
-        const lowerMessage = message.toLowerCase();
+        /*
+          Ask the AI whether this message contains something
+          worth remembering permanently.
+        */
+        const memoryCheck = await env.AI.run(
+          "@cf/meta/llama-3.1-8b-instruct-fast",
+          {
+            messages: [
+              {
+                role: "system",
+                content: `
+You decide whether a user's message contains useful personal information
+that should be remembered for future conversations.
 
+Save things such as:
+- Name
+- Important preferences
+- Hobbies
+- Long-term goals
+- Important projects
+- Useful personal facts
+
+Do NOT save:
+- Temporary questions
+- Random statements
+- One-off requests
+- General knowledge
+- Casual conversation
+
+Respond ONLY with JSON in this exact format:
+
+{
+  "remember": true,
+  "memory": "short useful memory"
+}
+
+or
+
+{
+  "remember": false,
+  "memory": ""
+}
+`
+              },
+              {
+                role: "user",
+                content: message
+              }
+            ],
+            max_tokens: 150
+          }
+        );
+
+        let memoryDecision = null;
+
+        try {
+          memoryDecision = JSON.parse(memoryCheck.response);
+        } catch {
+          memoryDecision = null;
+        }
+
+        // Save the memory if the AI decided it was useful
         if (
-          lowerMessage.includes("my name is ") ||
-          lowerMessage.includes("i live in ") ||
-          lowerMessage.includes("my favourite ") ||
-          lowerMessage.includes("my favorite ")
+          memoryDecision &&
+          memoryDecision.remember === true &&
+          memoryDecision.memory
         ) {
           await env.DB
             .prepare(
               "INSERT INTO memories (user_id, memory) VALUES (?, ?)"
             )
-            .bind("default-user", message)
+            .bind("default-user", memoryDecision.memory)
             .run();
         }
 
         return Response.json({
-          response: response
+          response
         });
 
       } catch (error) {
