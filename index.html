@@ -63,6 +63,11 @@
       background: #222;
       color: white;
       font-size: 16px;
+      outline: none;
+    }
+
+    input:focus {
+      border-color: #2675ff;
     }
 
     button {
@@ -71,6 +76,10 @@
       padding: 12px 16px;
       font-weight: bold;
       cursor: pointer;
+    }
+
+    button:active {
+      transform: scale(0.97);
     }
   </style>
 </head>
@@ -86,7 +95,12 @@
 </div>
 
 <div class="input-area">
-  <input id="message" placeholder="Talk to me..." autocomplete="off">
+  <input
+    id="message"
+    placeholder="Talk to me..."
+    autocomplete="off"
+  >
+
   <button onclick="sendMessage()">Send</button>
 </div>
 
@@ -103,35 +117,45 @@ async function sendMessage() {
 
   if (message === "") return;
 
+  // Show user's message
   const userMessage = document.createElement("div");
+
   userMessage.className = "message user";
   userMessage.textContent = message;
 
   chat.appendChild(userMessage);
 
+  // Clear input
   input.value = "";
 
+  // Save message to conversation history
   conversationHistory.push({
     role: "user",
     content: message
   });
 
+  // Create AI response bubble
   const aiMessage = document.createElement("div");
+
   aiMessage.className = "message ai";
   aiMessage.textContent = "Thinking...";
 
   chat.appendChild(aiMessage);
+
   chat.scrollTop = chat.scrollHeight;
 
   try {
 
     const response = await fetch("/api/chat", {
       method: "POST",
+
       headers: {
         "Content-Type": "application/json"
       },
+
       body: JSON.stringify({
         message: message,
+
         history: conversationHistory.slice(0, -1)
       })
     });
@@ -139,15 +163,19 @@ async function sendMessage() {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error || "Something went wrong");
+      throw new Error(
+        data.error || "Something went wrong"
+      );
     }
 
     const reply =
       data.response ||
       "I couldn't generate a response.";
 
+    // Show AI response
     aiMessage.textContent = reply;
 
+    // Save AI response to conversation history
     conversationHistory.push({
       role: "assistant",
       content: reply
@@ -156,24 +184,42 @@ async function sendMessage() {
   } catch (error) {
 
     aiMessage.textContent =
-      "Sorry, something went wrong: " + error.message;
+      "Sorry, something went wrong: " +
+      error.message;
 
+    // Remove failed user message from history
     conversationHistory.pop();
   }
 
   chat.scrollTop = chat.scrollHeight;
+
+  // Put cursor back into input
+  input.focus();
 }
 
 
-// Press Enter to send
-const messageInput = document.getElementById("message");
+// Enter sends message
+// Shift + Enter creates a new line
+const messageInput =
+  document.getElementById("message");
 
-messageInput.addEventListener("keydown", function(event) {
-  if (event.key === "Enter") {
-    event.preventDefault();
-    sendMessage();
+messageInput.addEventListener(
+  "keydown",
+  function(event) {
+
+    if (event.key === "Enter" && !event.shiftKey) {
+
+      event.preventDefault();
+
+      sendMessage();
+    }
   }
-});
+);
+
+
+// Automatically focus the input
+// when My AI opens
+messageInput.focus();
 
 </script>
 
