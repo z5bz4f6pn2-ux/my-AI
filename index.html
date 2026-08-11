@@ -5,6 +5,10 @@
   <title>My AI</title>
 
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
       background: #111;
@@ -13,7 +17,8 @@
     }
 
     header {
-      padding: 15px 20px;
+      height: 60px;
+      padding: 0 20px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -39,9 +44,54 @@
       background: #333;
     }
 
+    #layout {
+      display: flex;
+      height: calc(100vh - 60px);
+    }
+
+    #sidebar {
+      width: 250px;
+      border-right: 1px solid #333;
+      padding: 15px;
+      overflow-y: auto;
+      background: #151515;
+    }
+
+    .sidebar-title {
+      font-size: 14px;
+      color: #aaa;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+    }
+
+    .chat-item {
+      padding: 12px;
+      margin-bottom: 8px;
+      border-radius: 10px;
+      background: #222;
+      cursor: pointer;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .chat-item:hover {
+      background: #333;
+    }
+
+    .chat-item.active {
+      background: #2675ff;
+    }
+
+    #main {
+      flex: 1;
+      position: relative;
+      min-width: 0;
+    }
+
     #chat {
       padding: 15px;
-      height: 70vh;
+      height: calc(100vh - 150px);
       overflow-y: auto;
     }
 
@@ -64,7 +114,7 @@
     }
 
     .input-area {
-      position: fixed;
+      position: absolute;
       bottom: 0;
       left: 0;
       right: 0;
@@ -101,6 +151,22 @@
       background: white;
       color: black;
     }
+
+    @media (max-width: 700px) {
+
+      #sidebar {
+        width: 190px;
+      }
+
+      .message {
+        max-width: 90%;
+      }
+
+      .title {
+        font-size: 20px;
+      }
+
+    }
   </style>
 </head>
 
@@ -108,7 +174,9 @@
 
 <header>
 
-  <div class="title">My AI</div>
+  <div class="title">
+    My AI
+  </div>
 
   <button
     id="newChatButton"
@@ -119,30 +187,60 @@
 
 </header>
 
-<div id="chat">
 
-  <div class="message ai">
-    Hello 👋 I'm your AI assistant. We're building me together.
-  </div>
+<div id="layout">
+
+
+  <!-- SIDEBAR -->
+
+  <aside id="sidebar">
+
+    <div class="sidebar-title">
+      Recent Chats
+    </div>
+
+    <div id="conversationList">
+      Loading...
+    </div>
+
+  </aside>
+
+
+  <!-- MAIN CHAT -->
+
+  <main id="main">
+
+    <div id="chat">
+
+      <div class="message ai">
+        Hello 👋 I'm your AI assistant.
+        We're building me together.
+      </div>
+
+    </div>
+
+
+    <div class="input-area">
+
+      <input
+        id="message"
+        placeholder="Talk to me..."
+        autocomplete="off"
+      >
+
+      <button
+        class="send-button"
+        onclick="sendMessage()"
+      >
+        Send
+      </button>
+
+    </div>
+
+  </main>
 
 </div>
 
-<div class="input-area">
-
-  <input
-    id="message"
-    placeholder="Talk to me..."
-    autocomplete="off"
-  >
-
-  <button
-    class="send-button"
-    onclick="sendMessage()"
-  >
-    Send
-  </button>
-
-</div>
 
 <script>
 
@@ -152,26 +250,240 @@ let conversationId = null;
 
 
 // --------------------------------------------------
+// LOAD CONVERSATIONS
+// --------------------------------------------------
+
+async function loadConversations() {
+
+  const list =
+    document.getElementById(
+      "conversationList"
+    );
+
+  try {
+
+    const response =
+      await fetch(
+        "/api/conversations"
+      );
+
+    const data =
+      await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error ||
+        "Unable to load conversations"
+      );
+    }
+
+
+    list.innerHTML = "";
+
+
+    if (
+      !data.conversations ||
+      data.conversations.length === 0
+    ) {
+
+      list.innerHTML =
+        "<div style='color:#777;'>No saved chats yet.</div>";
+
+      return;
+    }
+
+
+    data.conversations.forEach(
+      conversation => {
+
+        const item =
+          document.createElement(
+            "div"
+          );
+
+        item.className =
+          "chat-item";
+
+
+        if (
+          String(conversation.id) ===
+          String(conversationId)
+        ) {
+
+          item.classList.add(
+            "active"
+          );
+
+        }
+
+
+        item.textContent =
+          conversation.title ||
+          "New Chat";
+
+
+        item.onclick = () =>
+          loadConversation(
+            conversation.id
+          );
+
+
+        list.appendChild(item);
+
+      }
+    );
+
+
+  } catch (error) {
+
+    list.innerHTML =
+      "<div style='color:#f66;'>Unable to load chats.</div>";
+
+    console.error(error);
+
+  }
+
+}
+
+
+// --------------------------------------------------
+// LOAD ONE CONVERSATION
+// --------------------------------------------------
+
+async function loadConversation(id) {
+
+  try {
+
+    const response =
+      await fetch(
+        "/api/conversations/" +
+        id
+      );
+
+    const data =
+      await response.json();
+
+
+    if (!response.ok) {
+      throw new Error(
+        data.error ||
+        "Unable to load conversation"
+      );
+    }
+
+
+    conversationId =
+      data.conversation.id;
+
+
+    conversationHistory = [];
+
+
+    const chat =
+      document.getElementById(
+        "chat"
+      );
+
+    chat.innerHTML = "";
+
+
+    data.messages.forEach(
+      message => {
+
+        const messageElement =
+          document.createElement(
+            "div"
+          );
+
+
+        messageElement.className =
+          "message " +
+          (
+            message.role === "user"
+              ? "user"
+              : "ai"
+          );
+
+
+        messageElement.textContent =
+          message.content;
+
+
+        chat.appendChild(
+          messageElement
+        );
+
+
+        conversationHistory.push({
+
+          role:
+            message.role,
+
+          content:
+            message.content
+
+        });
+
+      }
+    );
+
+
+    chat.scrollTop =
+      chat.scrollHeight;
+
+
+    loadConversations();
+
+
+    document
+      .getElementById("message")
+      .focus();
+
+
+  } catch (error) {
+
+    console.error(error);
+
+    alert(
+      "Couldn't load this conversation."
+    );
+
+  }
+
+}
+
+
+// --------------------------------------------------
 // SEND MESSAGE
 // --------------------------------------------------
 
 async function sendMessage() {
 
   const input =
-    document.getElementById("message");
+    document.getElementById(
+      "message"
+    );
 
   const chat =
-    document.getElementById("chat");
+    document.getElementById(
+      "chat"
+    );
 
   const message =
     input.value.trim();
 
-  if (message === "") return;
+
+  if (message === "") {
+    return;
+  }
 
 
-  // Display user message
+  // Show user message
+
   const userMessage =
-    document.createElement("div");
+    document.createElement(
+      "div"
+    );
 
   userMessage.className =
     "message user";
@@ -179,23 +491,29 @@ async function sendMessage() {
   userMessage.textContent =
     message;
 
-  chat.appendChild(userMessage);
+  chat.appendChild(
+    userMessage
+  );
 
 
-  // Clear input
   input.value = "";
 
 
-  // Add to local history
   conversationHistory.push({
+
     role: "user",
+
     content: message
+
   });
 
 
-  // Create thinking message
+  // Thinking message
+
   const aiMessage =
-    document.createElement("div");
+    document.createElement(
+      "div"
+    );
 
   aiMessage.className =
     "message ai";
@@ -203,7 +521,10 @@ async function sendMessage() {
   aiMessage.textContent =
     "Thinking...";
 
-  chat.appendChild(aiMessage);
+  chat.appendChild(
+    aiMessage
+  );
+
 
   chat.scrollTop =
     chat.scrollHeight;
@@ -212,28 +533,36 @@ async function sendMessage() {
   try {
 
     const response =
-      await fetch("/api/chat", {
+      await fetch(
+        "/api/chat",
+        {
 
-        method: "POST",
+          method: "POST",
 
-        headers: {
-          "Content-Type":
-            "application/json"
-        },
+          headers: {
+            "Content-Type":
+              "application/json"
+          },
 
-        body: JSON.stringify({
+          body:
+            JSON.stringify({
 
-          message: message,
+              message:
+                message,
 
-          history:
-            conversationHistory.slice(0, -1),
+              history:
+                conversationHistory.slice(
+                  0,
+                  -1
+                ),
 
-          conversationId:
-            conversationId
+              conversationId:
+                conversationId
 
-        })
+            })
 
-      });
+        }
+      );
 
 
     const data =
@@ -251,7 +580,10 @@ async function sendMessage() {
 
 
     // Store conversation ID
-    if (data.conversationId) {
+
+    if (
+      data.conversationId
+    ) {
 
       conversationId =
         data.conversationId;
@@ -264,19 +596,24 @@ async function sendMessage() {
       "I couldn't generate a response.";
 
 
-    // Display AI response
     aiMessage.textContent =
       reply;
 
 
-    // Save AI response locally
     conversationHistory.push({
 
-      role: "assistant",
+      role:
+        "assistant",
 
-      content: reply
+      content:
+        reply
 
     });
+
+
+    // Refresh sidebar
+
+    loadConversations();
 
 
   } catch (error) {
@@ -286,7 +623,6 @@ async function sendMessage() {
       error.message;
 
 
-    // Remove failed user message
     conversationHistory.pop();
 
   }
@@ -296,7 +632,6 @@ async function sendMessage() {
     chat.scrollHeight;
 
 
-  // Focus input
   input.focus();
 
 }
@@ -314,7 +649,9 @@ function newChat() {
 
 
   const chat =
-    document.getElementById("chat");
+    document.getElementById(
+      "chat"
+    );
 
 
   chat.innerHTML = `
@@ -329,6 +666,9 @@ function newChat() {
   `;
 
 
+  loadConversations();
+
+
   document
     .getElementById("message")
     .focus();
@@ -341,7 +681,9 @@ function newChat() {
 // --------------------------------------------------
 
 const messageInput =
-  document.getElementById("message");
+  document.getElementById(
+    "message"
+  );
 
 
 messageInput.addEventListener(
@@ -363,7 +705,12 @@ messageInput.addEventListener(
 );
 
 
-// Automatically focus input
+// --------------------------------------------------
+// START
+// --------------------------------------------------
+
+loadConversations();
+
 messageInput.focus();
 
 </script>
