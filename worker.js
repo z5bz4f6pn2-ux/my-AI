@@ -24,6 +24,7 @@ export default {
           ? memories.map(row => `- ${row.memory}`).join("\n")
           : "No permanent memories yet.";
 
+        // Instructions for My AI
         const systemPrompt = `
 You are My AI, a helpful, intelligent and natural AI assistant.
 
@@ -33,11 +34,11 @@ Do not repeatedly say that you are a computer program.
 Do not invent stories or unrelated information.
 Do not produce huge walls of text unless the user asks for detail.
 
-These are permanent memories about the user:
+PERMANENT MEMORIES ABOUT THE USER:
 
 ${memoryText}
 
-Use these memories naturally when relevant.
+Use these memories naturally when they are relevant.
 `;
 
         const messages = [
@@ -52,7 +53,7 @@ Use these memories naturally when relevant.
           }
         ];
 
-        // Generate response
+        // Generate the normal response
         const result = await env.AI.run(
           "@cf/meta/llama-3.1-8b-instruct-fast",
           {
@@ -64,8 +65,8 @@ Use these memories naturally when relevant.
         const response = result.response || "";
 
         /*
-          Ask the AI for a simple memory decision.
-          We deliberately use plain text rather than JSON.
+          Decide whether the user's message contains
+          something useful to remember.
         */
         const memoryCheck = await env.AI.run(
           "@cf/meta/llama-3.1-8b-instruct-fast",
@@ -74,29 +75,63 @@ Use these memories naturally when relevant.
               {
                 role: "system",
                 content: `
-Decide whether the user's message contains useful personal information
-that should be remembered for future conversations.
+You are My AI's memory system.
 
-Examples worth remembering:
-- Their name
-- Their hobbies
-- Their preferences
-- Their long-term goals
-- Important projects
-- Useful personal facts
+Your job is to identify specific personal information
+that would be useful in future conversations.
 
-Examples NOT worth remembering:
+IMPORTANT:
+If something is worth remembering, preserve ALL important
+specific details from the user's message.
+
+For example:
+
+User:
+"I've decided I want to learn Spanish."
+
+Memory:
+"The user wants to learn Spanish."
+
+NOT:
+"The user wants to learn a language."
+
+Another example:
+
+User:
+"My favourite colour is blue."
+
+Memory:
+"The user's favourite colour is blue."
+
+NOT:
+"The user has a favourite colour."
+
+Another example:
+
+User:
+"I want to become a professional mechanic."
+
+Memory:
+"The user wants to become a professional mechanic."
+
+Keep names, places, languages, numbers, preferences,
+goals and other important details exactly when relevant.
+
+Only save useful long-term information.
+
+Do NOT save:
 - Temporary questions
 - Calculations
 - One-off requests
 - General knowledge
-- Casual conversation
+- Random conversation
+- Things that are unlikely to matter later
 
-If it should be remembered, reply with:
+If useful information exists, reply:
 
-YES: followed by a short description of the memory.
+YES: [specific memory]
 
-If it should NOT be remembered, reply with:
+If there is nothing worth remembering, reply:
 
 NO
 `
@@ -106,7 +141,7 @@ NO
                 content: message
               }
             ],
-            max_tokens: 100
+            max_tokens: 150
           }
         );
 
