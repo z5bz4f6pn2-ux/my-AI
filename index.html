@@ -88,27 +88,59 @@
 </div>
 
 <script>
-function sendMessage() {
+<script>
+async function sendMessage() {
 
   const input = document.getElementById("message");
   const chat = document.getElementById("chat");
 
-  if (input.value.trim() === "") return;
+  const message = input.value.trim();
+
+  if (message === "") return;
 
   const userMessage = document.createElement("div");
   userMessage.className = "message user";
-  userMessage.textContent = input.value;
+  userMessage.textContent = message;
 
   chat.appendChild(userMessage);
 
+  input.value = "";
+
   const aiMessage = document.createElement("div");
   aiMessage.className = "message ai";
-  aiMessage.textContent =
-    "I received your message. We're going to connect my AI brain next.";
+  aiMessage.textContent = "Thinking...";
 
   chat.appendChild(aiMessage);
+  chat.scrollTop = chat.scrollHeight;
 
-  input.value = "";
+  try {
+
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        message: message
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Something went wrong");
+    }
+
+    aiMessage.textContent =
+      data.response || data.result || "I couldn't generate a response.";
+
+  } catch (error) {
+
+    aiMessage.textContent =
+      "Sorry, something went wrong: " + error.message;
+
+  }
+
   chat.scrollTop = chat.scrollHeight;
 }
 </script>
