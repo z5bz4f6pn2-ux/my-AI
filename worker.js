@@ -3,94 +3,9 @@ export default {
     const url = new URL(request.url);
     const userId = "default-user";
 
-    // ==================================================
-    // RENAME CONVERSATION
-    // ==================================================
-
-    if (
-      url.pathname.startsWith("/api/conversations/") &&
-      request.method === "PATCH"
-    ) {
-      try {
-        const id = url.pathname.split("/").pop();
-        const { title } = await request.json();
-
-        if (!title || !title.trim()) {
-          return Response.json(
-            { error: "Title cannot be empty" },
-            { status: 400 }
-          );
-        }
-
-        await env.DB
-          .prepare(`
-            UPDATE conversations
-            SET title = ?, updated_at = current_timestamp
-            WHERE id = ? AND user_id = ?
-          `)
-          .bind(
-            title.trim().substring(0, 80),
-            id,
-            userId
-          )
-          .run();
-
-        return Response.json({
-          success: true
-        });
-
-      } catch (error) {
-        return Response.json(
-          { error: error.message },
-          { status: 500 }
-        );
-      }
-    }
-
-
-    // ==================================================
-    // DELETE CONVERSATION
-    // ==================================================
-
-    if (
-      url.pathname.startsWith("/api/conversations/") &&
-      request.method === "DELETE"
-    ) {
-      try {
-        const id = url.pathname.split("/").pop();
-
-        await env.DB
-          .prepare(`
-            DELETE FROM messages
-            WHERE conversation_id = ?
-          `)
-          .bind(id)
-          .run();
-
-        await env.DB
-          .prepare(`
-            DELETE FROM conversations
-            WHERE id = ? AND user_id = ?
-          `)
-          .bind(id, userId)
-          .run();
-
-        return Response.json({
-          success: true
-        });
-
-      } catch (error) {
-        return Response.json(
-          { error: error.message },
-          { status: 500 }
-        );
-      }
-    }
-
-
-    // ==================================================
+    // --------------------------------------------------
     // GET SAVED MEMORIES
-    // ==================================================
+    // --------------------------------------------------
 
     if (
       url.pathname === "/api/memories" &&
@@ -121,9 +36,9 @@ export default {
     }
 
 
-    // ==================================================
+    // --------------------------------------------------
     // DELETE ONE MEMORY
-    // ==================================================
+    // --------------------------------------------------
 
     if (
       url.pathname.startsWith("/api/memories/") &&
@@ -157,9 +72,9 @@ export default {
     }
 
 
-    // ==================================================
-    // GET ALL CONVERSATIONS
-    // ==================================================
+    // --------------------------------------------------
+    // GET SAVED CONVERSATIONS
+    // --------------------------------------------------
 
     if (
       url.pathname === "/api/conversations" &&
@@ -191,9 +106,9 @@ export default {
     }
 
 
-    // ==================================================
-    // GET ONE CONVERSATION
-    // ==================================================
+    // --------------------------------------------------
+    // GET ONE SAVED CONVERSATION
+    // --------------------------------------------------
 
     if (
       url.pathname.startsWith("/api/conversations/") &&
@@ -254,9 +169,9 @@ export default {
     }
 
 
-    // ==================================================
+    // --------------------------------------------------
     // CHAT
-    // ==================================================
+    // --------------------------------------------------
 
     if (
       url.pathname === "/api/chat" &&
@@ -360,7 +275,7 @@ export default {
 
 
         // ----------------------------------------------
-        // SPEECH CORRECTION
+        // SPEECH-TO-TEXT CORRECTION
         // ----------------------------------------------
 
         let understoodMessage =
@@ -374,7 +289,7 @@ export default {
 
 
         // ----------------------------------------------
-        // SYSTEM PROMPT
+        // AI SYSTEM PROMPT
         // ----------------------------------------------
 
         const systemPrompt = `
@@ -413,8 +328,8 @@ IMPORTANT MEMORY RULE:
 
 Only use a saved memory when it is genuinely relevant.
 
-Do not invent connections between unrelated memories and
-the current conversation.
+Do not invent connections between unrelated memories and the
+current conversation.
 
 PERMANENT MEMORY:
 
@@ -483,7 +398,7 @@ ${understoodMessage}
 
 
         // ----------------------------------------------
-        // UPDATE CONVERSATION TIME
+        // UPDATE CONVERSATION
         // ----------------------------------------------
 
         await env.DB
@@ -500,7 +415,7 @@ ${understoodMessage}
 
 
         // ----------------------------------------------
-        // AUTOMATIC TITLE
+        // AUTOMATIC CHAT TITLE
         // ----------------------------------------------
 
         const existingConversation =
@@ -529,7 +444,6 @@ ${understoodMessage}
                 "@cf/meta/llama-3.1-8b-instruct-fast",
                 {
                   messages: [
-
                     {
                       role:
                         "system",
@@ -554,7 +468,6 @@ Rules:
                       content:
                         message
                     }
-
                   ],
 
                   max_tokens: 30
@@ -623,7 +536,6 @@ Rules:
             "@cf/meta/llama-3.1-8b-instruct-fast",
             {
               messages: [
-
                 {
                   role:
                     "system",
@@ -669,7 +581,6 @@ NO
                   content:
                     message
                 }
-
               ],
 
               max_tokens: 150
@@ -718,16 +629,13 @@ NO
 
 
         // ----------------------------------------------
-        // RETURN RESPONSE
+        // RETURN
         // ----------------------------------------------
 
         return Response.json({
-
           response,
-
           conversationId:
             currentConversationId
-
         });
 
 
@@ -749,11 +657,6 @@ NO
     }
 
 
-    // ==================================================
-    // ASSETS
-    // ==================================================
-
     return env.ASSETS.fetch(request);
-
   }
 };
