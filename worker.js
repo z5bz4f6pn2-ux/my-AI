@@ -3,25 +3,24 @@ export default {
     const url = new URL(request.url);
     const userId = "default-user";
 
-    // --------------------------------------------------
+    // ==================================================
     // GET SAVED MEMORIES
-    // --------------------------------------------------
+    // ==================================================
 
     if (
       url.pathname === "/api/memories" &&
       request.method === "GET"
     ) {
       try {
-        const result =
-          await env.DB
-            .prepare(`
-              SELECT id, memory, created_at
-              FROM memories
-              WHERE user_id = ?
-              ORDER BY created_at DESC
-            `)
-            .bind(userId)
-            .all();
+        const result = await env.DB
+          .prepare(`
+            SELECT id, memory, created_at
+            FROM memories
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+          `)
+          .bind(userId)
+          .all();
 
         return Response.json({
           memories: result.results || []
@@ -36,24 +35,104 @@ export default {
     }
 
 
-    // --------------------------------------------------
+    // ==================================================
     // DELETE ONE MEMORY
-    // --------------------------------------------------
+    // ==================================================
 
     if (
       url.pathname.startsWith("/api/memories/") &&
       request.method === "DELETE"
     ) {
       try {
-        const id =
-          url.pathname.split("/").pop();
+        const id = url.pathname.split("/").pop();
 
         await env.DB
           .prepare(`
             DELETE FROM memories
             WHERE id = ? AND user_id = ?
           `)
+          .bind(id, userId)
+          .run();
+
+        return Response.json({
+          success: true
+        });
+
+      } catch (error) {
+        return Response.json(
+          { error: error.message },
+          { status: 500 }
+        );
+      }
+    }
+
+
+    // ==================================================
+    // GET ALL CONVERSATIONS
+    // ==================================================
+
+    if (
+      url.pathname === "/api/conversations" &&
+      request.method === "GET"
+    ) {
+      try {
+        const result = await env.DB
+          .prepare(`
+            SELECT id, title, created_at, updated_at
+            FROM conversations
+            WHERE user_id = ?
+            ORDER BY updated_at DESC
+          `)
+          .bind(userId)
+          .all();
+
+        return Response.json({
+          conversations: result.results || []
+        });
+
+      } catch (error) {
+        return Response.json(
+          { error: error.message },
+          { status: 500 }
+        );
+      }
+    }
+
+
+    // ==================================================
+    // RENAME CONVERSATION
+    // ==================================================
+
+    if (
+      url.pathname.startsWith("/api/conversations/") &&
+      request.method === "PATCH"
+    ) {
+      try {
+        const id = url.pathname.split("/").pop();
+        const body = await request.json();
+        const title = body.title;
+
+        if (!title || !title.trim()) {
+          return Response.json(
+            {
+              error: "Title cannot be empty"
+            },
+            {
+              status: 400
+            }
+          );
+        }
+
+        await env.DB
+          .prepare(`
+            UPDATE conversations
+            SET title = ?,
+                updated_at = current_timestamp
+            WHERE id = ?
+            AND user_id = ?
+          `)
           .bind(
+            title.trim().substring(0, 80),
             id,
             userId
           )
@@ -72,29 +151,38 @@ export default {
     }
 
 
-    // --------------------------------------------------
-    // GET SAVED CONVERSATIONS
-    // --------------------------------------------------
+    // ==================================================
+    // DELETE CONVERSATION
+    // ==================================================
 
     if (
-      url.pathname === "/api/conversations" &&
-      request.method === "GET"
+      url.pathname.startsWith("/api/conversations/") &&
+      request.method === "DELETE"
     ) {
       try {
-        const result =
-          await env.DB
-            .prepare(`
-              SELECT id, title, created_at, updated_at
-              FROM conversations
-              WHERE user_id = ?
-              ORDER BY updated_at DESC
-            `)
-            .bind(userId)
-            .all();
+        const id = url.pathname.split("/").pop();
+
+        // Delete messages belonging to the conversation first
+        await env.DB
+          .prepare(`
+            DELETE FROM messages
+            WHERE conversation_id = ?
+          `)
+          .bind(id)
+          .run();
+
+        // Then delete the conversation
+        await env.DB
+          .prepare(`
+            DELETE FROM conversations
+            WHERE id = ?
+            AND user_id = ?
+          `)
+          .bind(id, userId)
+          .run();
 
         return Response.json({
-          conversations:
-            result.results || []
+          success: true
         });
 
       } catch (error) {
@@ -106,36 +194,31 @@ export default {
     }
 
 
-    // --------------------------------------------------
-    // GET ONE SAVED CONVERSATION
-    // --------------------------------------------------
+    // ==================================================
+    // GET ONE CONVERSATION
+    // ==================================================
 
     if (
       url.pathname.startsWith("/api/conversations/") &&
       request.method === "GET"
     ) {
       try {
-        const id =
-          url.pathname.split("/").pop();
+        const id = url.pathname.split("/").pop();
 
-        const conversation =
-          await env.DB
-            .prepare(`
-              SELECT id, title, created_at, updated_at
-              FROM conversations
-              WHERE id = ? AND user_id = ?
-            `)
-            .bind(
-              id,
-              userId
-            )
-            .first();
+        const conversation = await env.DB
+          .prepare(`
+            SELECT id, title, created_at, updated_at
+            FROM conversations
+            WHERE id = ?
+            AND user_id = ?
+          `)
+          .bind(id, userId)
+          .first();
 
         if (!conversation) {
           return Response.json(
             {
-              error:
-                "Conversation not found"
+              error: "Conversation not found"
             },
             {
               status: 404
@@ -143,21 +226,19 @@ export default {
           );
         }
 
-        const messages =
-          await env.DB
-            .prepare(`
-              SELECT role, content, created_at
-              FROM messages
-              WHERE conversation_id = ?
-              ORDER BY id ASC
-            `)
-            .bind(id)
-            .all();
+        const messages = await env.DB
+          .prepare(`
+            SELECT role, content, created_at
+            FROM messages
+            WHERE conversation_id = ?
+            ORDER BY id ASC
+          `)
+          .bind(id)
+          .all();
 
         return Response.json({
           conversation,
-          messages:
-            messages.results || []
+          messages: messages.results || []
         });
 
       } catch (error) {
@@ -169,16 +250,15 @@ export default {
     }
 
 
-    // --------------------------------------------------
+    // ==================================================
     // CHAT
-    // --------------------------------------------------
+    // ==================================================
 
     if (
       url.pathname === "/api/chat" &&
       request.method === "POST"
     ) {
       try {
-
         const {
           message,
           history = [],
@@ -188,8 +268,7 @@ export default {
         if (!message) {
           return Response.json(
             {
-              error:
-                "Missing message"
+              error: "Missing message"
             },
             {
               status: 400
@@ -202,27 +281,23 @@ export default {
         // CREATE OR LOAD CONVERSATION
         // ----------------------------------------------
 
-        let currentConversationId =
-          conversationId;
+        let currentConversationId = conversationId;
 
         if (!currentConversationId) {
+          const conversation = await env.DB
+            .prepare(`
+              INSERT INTO conversations
+              (user_id, title)
+              VALUES (?, ?)
+              RETURNING id
+            `)
+            .bind(
+              userId,
+              "New Chat"
+            )
+            .first();
 
-          const conversation =
-            await env.DB
-              .prepare(`
-                INSERT INTO conversations
-                (user_id, title)
-                VALUES (?, ?)
-                RETURNING id
-              `)
-              .bind(
-                userId,
-                "New Chat"
-              )
-              .first();
-
-          currentConversationId =
-            conversation.id;
+          currentConversationId = conversation.id;
         }
 
 
@@ -248,38 +323,31 @@ export default {
         // GET MEMORIES
         // ----------------------------------------------
 
-        const memoryResult =
-          await env.DB
-            .prepare(`
-              SELECT id, memory
-              FROM memories
-              WHERE user_id = ?
-              ORDER BY created_at DESC
-              LIMIT 30
-            `)
-            .bind(userId)
-            .all();
+        const memoryResult = await env.DB
+          .prepare(`
+            SELECT id, memory
+            FROM memories
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT 30
+          `)
+          .bind(userId)
+          .all();
 
-        const memories =
-          memoryResult.results || [];
+        const memories = memoryResult.results || [];
 
-        const memoryText =
-          memories.length
-            ? memories
-                .map(
-                  row =>
-                    `- ${row.memory}`
-                )
-                .join("\n")
-            : "No permanent memories yet.";
+        const memoryText = memories.length
+          ? memories
+              .map(row => `- ${row.memory}`)
+              .join("\n")
+          : "No permanent memories yet.";
 
 
         // ----------------------------------------------
-        // SPEECH-TO-TEXT CORRECTION
+        // SPEECH CORRECTION
         // ----------------------------------------------
 
-        let understoodMessage =
-          message;
+        let understoodMessage = message;
 
         understoodMessage =
           understoodMessage.replace(
@@ -289,7 +357,7 @@ export default {
 
 
         // ----------------------------------------------
-        // AI SYSTEM PROMPT
+        // SYSTEM PROMPT
         // ----------------------------------------------
 
         const systemPrompt = `
@@ -328,8 +396,8 @@ IMPORTANT MEMORY RULE:
 
 Only use a saved memory when it is genuinely relevant.
 
-Do not invent connections between unrelated memories and the
-current conversation.
+Do not invent connections between unrelated memories and
+the current conversation.
 
 PERMANENT MEMORY:
 
@@ -347,32 +415,25 @@ ${understoodMessage}
 
         const messages = [
           {
-            role:
-              "system",
-            content:
-              systemPrompt
+            role: "system",
+            content: systemPrompt
           },
 
           ...history,
 
           {
-            role:
-              "user",
-            content:
-              understoodMessage
+            role: "user",
+            content: understoodMessage
           }
         ];
 
-
-        const result =
-          await env.AI.run(
-            "@cf/meta/llama-3.1-8b-instruct-fast",
-            {
-              messages,
-              max_tokens: 512
-            }
-          );
-
+        const result = await env.AI.run(
+          "@cf/meta/llama-3.1-8b-instruct-fast",
+          {
+            messages,
+            max_tokens: 512
+          }
+        );
 
         const response =
           result.response ||
@@ -398,14 +459,13 @@ ${understoodMessage}
 
 
         // ----------------------------------------------
-        // UPDATE CONVERSATION
+        // UPDATE CONVERSATION TIME
         // ----------------------------------------------
 
         await env.DB
           .prepare(`
             UPDATE conversations
-            SET updated_at =
-              current_timestamp
+            SET updated_at = current_timestamp
             WHERE id = ?
           `)
           .bind(
@@ -415,7 +475,7 @@ ${understoodMessage}
 
 
         // ----------------------------------------------
-        // AUTOMATIC CHAT TITLE
+        // AUTOMATIC TITLE
         // ----------------------------------------------
 
         const existingConversation =
@@ -425,30 +485,21 @@ ${understoodMessage}
               FROM conversations
               WHERE id = ?
             `)
-            .bind(
-              currentConversationId
-            )
+            .bind(currentConversationId)
             .first();
-
 
         if (
           existingConversation &&
-          existingConversation.title ===
-            "New Chat"
+          existingConversation.title === "New Chat"
         ) {
-
           try {
-
-            const titleResult =
-              await env.AI.run(
-                "@cf/meta/llama-3.1-8b-instruct-fast",
-                {
-                  messages: [
-                    {
-                      role:
-                        "system",
-
-                      content: `
+            const titleResult = await env.AI.run(
+              "@cf/meta/llama-3.1-8b-instruct-fast",
+              {
+                messages: [
+                  {
+                    role: "system",
+                    content: `
 Create a very short title for this conversation.
 
 Rules:
@@ -459,28 +510,21 @@ Rules:
 - Describe the main subject.
 - Do not invent information.
 `
-                    },
-
-                    {
-                      role:
-                        "user",
-
-                      content:
-                        message
-                    }
-                  ],
-
-                  max_tokens: 30
-                }
-              );
-
+                  },
+                  {
+                    role: "user",
+                    content: message
+                  }
+                ],
+                max_tokens: 30
+              }
+            );
 
             let title =
               (
                 titleResult.response ||
                 ""
               ).trim();
-
 
             title =
               title
@@ -494,13 +538,11 @@ Rules:
                 )
                 .trim();
 
-
             if (
               title &&
               title.length > 0 &&
               title.length < 80
             ) {
-
               await env.DB
                 .prepare(`
                   UPDATE conversations
@@ -512,18 +554,14 @@ Rules:
                   currentConversationId
                 )
                 .run();
-
             }
 
           } catch (titleError) {
-
             console.error(
               "Title error:",
               titleError
             );
-
           }
-
         }
 
 
@@ -531,16 +569,13 @@ Rules:
         // MEMORY EXTRACTION
         // ----------------------------------------------
 
-        const memoryCheck =
-          await env.AI.run(
-            "@cf/meta/llama-3.1-8b-instruct-fast",
-            {
-              messages: [
-                {
-                  role:
-                    "system",
-
-                  content: `
+        const memoryCheck = await env.AI.run(
+          "@cf/meta/llama-3.1-8b-instruct-fast",
+          {
+            messages: [
+              {
+                role: "system",
+                content: `
 You are the permanent memory system for My AI.
 
 Save only useful long-term personal information.
@@ -572,21 +607,15 @@ Otherwise:
 
 NO
 `
-                },
-
-                {
-                  role:
-                    "user",
-
-                  content:
-                    message
-                }
-              ],
-
-              max_tokens: 150
-            }
-          );
-
+              },
+              {
+                role: "user",
+                content: message
+              }
+            ],
+            max_tokens: 150
+          }
+        );
 
         const memoryDecision =
           (
@@ -594,23 +623,17 @@ NO
             ""
           ).trim();
 
-
         if (
           memoryDecision
             .toUpperCase()
             .startsWith("YES:")
         ) {
-
           const memory =
             memoryDecision
               .substring(4)
               .trim();
 
-
-          if (
-            memory.length > 0
-          ) {
-
+          if (memory.length > 0) {
             await env.DB
               .prepare(`
                 INSERT INTO memories
@@ -622,14 +645,12 @@ NO
                 memory
               )
               .run();
-
           }
-
         }
 
 
         // ----------------------------------------------
-        // RETURN
+        // RETURN RESPONSE
         // ----------------------------------------------
 
         return Response.json({
@@ -638,24 +659,24 @@ NO
             currentConversationId
         });
 
-
       } catch (error) {
-
         console.error(error);
 
         return Response.json(
           {
-            error:
-              error.message
+            error: error.message
           },
           {
             status: 500
           }
         );
-
       }
     }
 
+
+    // ==================================================
+    // ASSETS
+    // ==================================================
 
     return env.ASSETS.fetch(request);
   }
