@@ -1,4 +1,4 @@
-const MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
+const MODEL = "@cf/zai-org/glm-4.7-flash";
 const USER_COOKIE = "my_ai_user";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365 * 2;
 
