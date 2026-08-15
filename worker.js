@@ -47,8 +47,8 @@ function getUser(request) {
   }
 
   return {
-    userId: createUserId(),
-    isNew: true
+    userId: "default-user",
+    isNew: false
   };
 }
 
