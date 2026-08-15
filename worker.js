@@ -1,7 +1,133 @@
+const MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
+const USER_COOKIE = "my_ai_user";
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 365 * 2;
+
+function json(data, status = 200, extraHeaders = {}) {
+  return Response.json(data, {
+    status,
+    headers: {
+      "Cache-Control": "no-store",
+      ...extraHeaders
+    }
+  });
+}
+
+function createUserId() {
+  return crypto.randomUUID();
+}
+
+function getCookie(request, name) {
+  const cookieHeader = request.headers.get("Cookie");
+
+  if (!cookieHeader) {
+    return null;
+  }
+
+  const cookies = cookieHeader.split(";");
+
+  for (const cookie of cookies) {
+    const [key, ...valueParts] = cookie.trim().split("=");
+
+    if (key === name) {
+      return valueParts.join("=");
+    }
+  }
+
+  return null;
+}
+
+function getUser(request) {
+  const existingUser = getCookie(request, USER_COOKIE);
+
+  if (existingUser && existingUser.length <= 100) {
+    return {
+      userId: existingUser,
+      isNew: false
+    };
+  }
+
+  return {
+    userId: createUserId(),
+    isNew: true
+  };
+}
+
+function userCookie(userId) {
+  return `${USER_COOKIE}=${userId}; Path=/; Max-Age=${COOKIE_MAX_AGE}; HttpOnly; Secure; SameSite=Lax`;
+}
+
+function cleanText(value, maxLength = 10000) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim().slice(0, maxLength);
+}
+
+function cleanHistory(history) {
+  if (!Array.isArray(history)) {
+    return [];
+  }
+
+  return history
+    .filter(
+      item =>
+        item &&
+        (item.role === "user" || item.role === "assistant") &&
+        typeof item.content === "string"
+    )
+    .slice(-20)
+    .map(item => ({
+      role: item.role,
+      content: item.content.slice(0, 10000)
+    }));
+}
+
+function extractAIResponse(result) {
+  if (!result) {
+    return "";
+  }
+
+  if (typeof result.response === "string") {
+    return result.response.trim();
+  }
+
+  return "";
+}
+
+function buildHeaders(isNewUser, userId) {
+  return isNewUser
+    ? {
+        "Set-Cookie": userCookie(userId)
+      }
+    : {};
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    const userId = "default-user";
+
+    const { userId, isNew } = getUser(request);
+
+    const headers = buildHeaders(isNew, userId);
+
+    // ==================================================
+    // HEALTH CHECK
+    // ==================================================
+
+    if (
+      url.pathname === "/api/health" &&
+      request.method === "GET"
+    ) {
+      return json(
+        {
+          ok: true,
+          service: "My AI"
+        },
+        200,
+        headers
+      );
+    }
 
     // ==================================================
     // GET SAVED MEMORIES
@@ -22,18 +148,26 @@ export default {
           .bind(userId)
           .all();
 
-        return Response.json({
-          memories: result.results || []
-        });
+        return json(
+          {
+            memories: result.results || []
+          },
+          200,
+          headers
+        );
 
       } catch (error) {
-        return Response.json(
-          { error: error.message },
-          { status: 500 }
+        console.error("Memory fetch error:", error);
+
+        return json(
+          {
+            error: "Unable to load memories."
+          },
+          500,
+          headers
         );
       }
     }
-
 
     // ==================================================
     // DELETE ONE MEMORY
@@ -46,26 +180,46 @@ export default {
       try {
         const id = url.pathname.split("/").pop();
 
-        await env.DB
+        if (!id) {
+          return json(
+            {
+              error: "Memory ID is required."
+            },
+            400,
+            headers
+          );
+        }
+
+        const result = await env.DB
           .prepare(`
             DELETE FROM memories
-            WHERE id = ? AND user_id = ?
+            WHERE id = ?
+            AND user_id = ?
           `)
           .bind(id, userId)
           .run();
 
-        return Response.json({
-          success: true
-        });
+        return json(
+          {
+            success: true,
+            deleted: (result.meta?.changes || 0) > 0
+          },
+          200,
+          headers
+        );
 
       } catch (error) {
-        return Response.json(
-          { error: error.message },
-          { status: 500 }
+        console.error("Memory delete error:", error);
+
+        return json(
+          {
+            error: "Unable to delete memory."
+          },
+          500,
+          headers
         );
       }
     }
-
 
     // ==================================================
     // GET ALL CONVERSATIONS
@@ -78,7 +232,11 @@ export default {
       try {
         const result = await env.DB
           .prepare(`
-            SELECT id, title, created_at, updated_at
+            SELECT
+              id,
+              title,
+              created_at,
+              updated_at
             FROM conversations
             WHERE user_id = ?
             ORDER BY updated_at DESC
@@ -86,18 +244,26 @@ export default {
           .bind(userId)
           .all();
 
-        return Response.json({
-          conversations: result.results || []
-        });
+        return json(
+          {
+            conversations: result.results || []
+          },
+          200,
+          headers
+        );
 
       } catch (error) {
-        return Response.json(
-          { error: error.message },
-          { status: 500 }
+        console.error("Conversation list error:", error);
+
+        return json(
+          {
+            error: "Unable to load conversations."
+          },
+          500,
+          headers
         );
       }
     }
-
 
     // ==================================================
     // RENAME CONVERSATION
@@ -109,47 +275,67 @@ export default {
     ) {
       try {
         const id = url.pathname.split("/").pop();
-        const body = await request.json();
-        const title = body.title;
 
-        if (!title || !title.trim()) {
-          return Response.json(
+        const body = await request.json();
+
+        const title = cleanText(body?.title, 80);
+
+        if (!title) {
+          return json(
             {
-              error: "Title cannot be empty"
+              error: "Title cannot be empty."
             },
-            {
-              status: 400
-            }
+            400,
+            headers
           );
         }
 
-        await env.DB
+        const result = await env.DB
           .prepare(`
             UPDATE conversations
-            SET title = ?,
-                updated_at = current_timestamp
+            SET
+              title = ?,
+              updated_at = current_timestamp
             WHERE id = ?
             AND user_id = ?
           `)
           .bind(
-            title.trim().substring(0, 80),
+            title,
             id,
             userId
           )
           .run();
 
-        return Response.json({
-          success: true
-        });
+        if ((result.meta?.changes || 0) === 0) {
+          return json(
+            {
+              error: "Conversation not found."
+            },
+            404,
+            headers
+          );
+        }
+
+        return json(
+          {
+            success: true
+          },
+          200,
+          headers
+        );
 
       } catch (error) {
-        return Response.json(
-          { error: error.message },
-          { status: 500 }
+        console.error("Conversation rename error:", error);
+
+        return json(
+          {
+            error: "Unable to rename conversation."
+          },
+          500,
+          headers
         );
       }
     }
-
 
     // ==================================================
     // DELETE CONVERSATION
@@ -162,7 +348,26 @@ export default {
       try {
         const id = url.pathname.split("/").pop();
 
-        // Delete messages belonging to the conversation first
+        const conversation = await env.DB
+          .prepare(`
+            SELECT id
+            FROM conversations
+            WHERE id = ?
+            AND user_id = ?
+          `)
+          .bind(id, userId)
+          .first();
+
+        if (!conversation) {
+          return json(
+            {
+              error: "Conversation not found."
+            },
+            404,
+            headers
+          );
+        }
+
         await env.DB
           .prepare(`
             DELETE FROM messages
@@ -171,7 +376,6 @@ export default {
           .bind(id)
           .run();
 
-        // Then delete the conversation
         await env.DB
           .prepare(`
             DELETE FROM conversations
@@ -181,18 +385,26 @@ export default {
           .bind(id, userId)
           .run();
 
-        return Response.json({
-          success: true
-        });
+        return json(
+          {
+            success: true
+          },
+          200,
+          headers
+        );
 
       } catch (error) {
-        return Response.json(
-          { error: error.message },
-          { status: 500 }
+        console.error("Conversation delete error:", error);
+
+        return json(
+          {
+            error: "Unable to delete conversation."
+          },
+          500,
+          headers
         );
       }
     }
-
 
     // ==================================================
     // GET ONE CONVERSATION
@@ -207,7 +419,11 @@ export default {
 
         const conversation = await env.DB
           .prepare(`
-            SELECT id, title, created_at, updated_at
+            SELECT
+              id,
+              title,
+              created_at,
+              updated_at
             FROM conversations
             WHERE id = ?
             AND user_id = ?
@@ -216,19 +432,21 @@ export default {
           .first();
 
         if (!conversation) {
-          return Response.json(
+          return json(
             {
-              error: "Conversation not found"
+              error: "Conversation not found."
             },
-            {
-              status: 404
-            }
+            404,
+            headers
           );
         }
 
         const messages = await env.DB
           .prepare(`
-            SELECT role, content, created_at
+            SELECT
+              role,
+              content,
+              created_at
             FROM messages
             WHERE conversation_id = ?
             ORDER BY id ASC
@@ -236,19 +454,27 @@ export default {
           .bind(id)
           .all();
 
-        return Response.json({
-          conversation,
-          messages: messages.results || []
-        });
+        return json(
+          {
+            conversation,
+            messages: messages.results || []
+          },
+          200,
+          headers
+        );
 
       } catch (error) {
-        return Response.json(
-          { error: error.message },
-          { status: 500 }
+        console.error("Conversation fetch error:", error);
+
+        return json(
+          {
+            error: "Unable to load conversation."
+          },
+          500,
+          headers
         );
       }
     }
-
 
     // ==================================================
     // CHAT
@@ -259,47 +485,75 @@ export default {
       request.method === "POST"
     ) {
       try {
-        const {
-          message,
-          history = [],
-          conversationId = null
-        } = await request.json();
+        const body = await request.json();
+
+        const message = cleanText(body?.message, 12000);
+
+        const history = cleanHistory(body?.history);
+
+        const conversationId =
+          body?.conversationId || null;
 
         if (!message) {
-          return Response.json(
+          return json(
             {
-              error: "Missing message"
+              error: "Please enter a message."
             },
-            {
-              status: 400
-            }
+            400,
+            headers
           );
         }
 
-
         // ----------------------------------------------
-        // CREATE OR LOAD CONVERSATION
+        // CREATE OR VERIFY CONVERSATION
         // ----------------------------------------------
 
-        let currentConversationId = conversationId;
+        let currentConversationId =
+          conversationId;
 
-        if (!currentConversationId) {
-          const conversation = await env.DB
-            .prepare(`
-              INSERT INTO conversations
-              (user_id, title)
-              VALUES (?, ?)
-              RETURNING id
-            `)
-            .bind(
-              userId,
-              "New Chat"
-            )
-            .first();
+        if (currentConversationId) {
+          const existingConversation =
+            await env.DB
+              .prepare(`
+                SELECT id
+                FROM conversations
+                WHERE id = ?
+                AND user_id = ?
+              `)
+              .bind(
+                currentConversationId,
+                userId
+              )
+              .first();
 
-          currentConversationId = conversation.id;
+          if (!existingConversation) {
+            return json(
+              {
+                error: "Conversation not found."
+              },
+              404,
+              headers
+            );
+          }
+
+        } else {
+          const conversation =
+            await env.DB
+              .prepare(`
+                INSERT INTO conversations
+                (user_id, title)
+                VALUES (?, ?)
+                RETURNING id
+              `)
+              .bind(
+                userId,
+                "New Chat"
+              )
+              .first();
+
+          currentConversationId =
+            conversation.id;
         }
-
 
         // ----------------------------------------------
         // SAVE USER MESSAGE
@@ -318,102 +572,99 @@ export default {
           )
           .run();
 
-
         // ----------------------------------------------
         // GET MEMORIES
         // ----------------------------------------------
 
-        const memoryResult = await env.DB
-          .prepare(`
-            SELECT id, memory
-            FROM memories
-            WHERE user_id = ?
-            ORDER BY created_at DESC
-            LIMIT 30
-          `)
-          .bind(userId)
-          .all();
+        const memoryResult =
+          await env.DB
+            .prepare(`
+              SELECT
+                id,
+                memory
+              FROM memories
+              WHERE user_id = ?
+              ORDER BY created_at DESC
+              LIMIT 30
+            `)
+            .bind(userId)
+            .all();
 
-        const memories = memoryResult.results || [];
+        const memories =
+          memoryResult.results || [];
 
-        const memoryText = memories.length
-          ? memories
-              .map(row => `- ${row.memory}`)
-              .join("\n")
-          : "No permanent memories yet.";
-
-
-        // ----------------------------------------------
-        // SPEECH CORRECTION
-        // ----------------------------------------------
-
-        let understoodMessage = message;
-
-        understoodMessage =
-          understoodMessage.replace(
-            /\bweather intelligence\b/gi,
-            "whether intelligence"
-          );
-
+        const memoryText =
+          memories.length > 0
+            ? memories
+                .map(row => `- ${row.memory}`)
+                .join("\n")
+            : "No saved memories.";
 
         // ----------------------------------------------
         // SYSTEM PROMPT
         // ----------------------------------------------
 
         const systemPrompt = `
-You are My AI.
+You are My AI, a personal AI assistant.
 
-You are a personal AI assistant designed for natural,
-intelligent and meaningful conversations.
+Your personality:
+- Friendly
+- Intelligent
+- Calm
+- Natural
+- Honest
+- Helpful
+- Direct
+- Thoughtful
 
-Be friendly, intelligent, thoughtful, calm, honest and direct.
-
-Talk naturally.
+Speak naturally like a capable personal assistant.
 
 Do not behave like a customer-service chatbot.
 
-Do not automatically turn every answer into a numbered list.
+Do not use numbered lists unless they genuinely make
+the answer easier to understand.
 
-Match the length of your response to the user's message.
+Match the length of your answer to the user's request.
 
-Do not automatically ask a question at the end of every response.
+Do not add unnecessary filler.
 
-Only ask a question when it is genuinely useful or necessary.
+Do not repeatedly say that you are an AI.
 
-Do not use unnecessary filler.
+Do not automatically ask a question at the end of every
+response.
 
-Do not repeatedly say you are an AI.
+Only ask a question when it is genuinely useful.
 
-Do not invent information.
+Never invent facts.
 
-Do not simply agree with everything the user says.
+If you are uncertain, say so.
 
-If the user is wrong, explain why respectfully.
+If the user is mistaken, explain the correction respectfully.
 
-If something is uncertain, say so.
+MEMORY RULES:
 
-IMPORTANT MEMORY RULE:
+The following information has been deliberately saved
+as long-term memory for this user.
 
-Only use a saved memory when it is genuinely relevant.
+Only use memories when they are genuinely relevant.
 
-Do not invent connections between unrelated memories and
-the current conversation.
+Do not mention memories unnecessarily.
 
-PERMANENT MEMORY:
+Do not reveal the entire memory list unless the user
+specifically asks about their memories.
+
+Do not assume that unrelated memories are connected.
+
+SAVED MEMORIES:
 
 ${memoryText}
-
-CURRENT USER MESSAGE:
-
-${understoodMessage}
 `;
 
-
         // ----------------------------------------------
-        // GENERATE RESPONSE
+        // GENERATE AI RESPONSE
         // ----------------------------------------------
 
-        const messages = [
+        const aiMessages = [
           {
             role: "system",
             content: systemPrompt
@@ -423,22 +674,22 @@ ${understoodMessage}
 
           {
             role: "user",
-            content: understoodMessage
+            content: message
           }
         ];
 
-        const result = await env.AI.run(
-          "@cf/meta/llama-3.1-8b-instruct-fast",
-          {
-            messages,
-            max_tokens: 512
-          }
-        );
+        const result =
+          await env.AI.run(
+            MODEL,
+            {
+              messages: aiMessages,
+              max_tokens: 700
+            }
+          );
 
         const response =
-          result.response ||
-          "I couldn't generate a response.";
-
+          extractAIResponse(result) ||
+          "I'm sorry, I wasn't able to generate a response.";
 
         // ----------------------------------------------
         // SAVE AI RESPONSE
@@ -457,9 +708,8 @@ ${understoodMessage}
           )
           .run();
 
-
         // ----------------------------------------------
-        // UPDATE CONVERSATION TIME
+        // UPDATE CONVERSATION
         // ----------------------------------------------
 
         await env.DB
@@ -467,12 +717,13 @@ ${understoodMessage}
             UPDATE conversations
             SET updated_at = current_timestamp
             WHERE id = ?
+            AND user_id = ?
           `)
           .bind(
-            currentConversationId
+            currentConversationId,
+            userId
           )
           .run();
-
 
         // ----------------------------------------------
         // AUTOMATIC TITLE
@@ -484,8 +735,12 @@ ${understoodMessage}
               SELECT title
               FROM conversations
               WHERE id = ?
+              AND user_id = ?
             `)
-            .bind(currentConversationId)
+            .bind(
+              currentConversationId,
+              userId
+            )
             .first();
 
         if (
@@ -493,22 +748,116 @@ ${understoodMessage}
           existingConversation.title === "New Chat"
         ) {
           try {
-            const titleResult = await env.AI.run(
-              "@cf/meta/llama-3.1-8b-instruct-fast",
+            const titleResult =
+              await env.AI.run(
+                MODEL,
+                {
+                  messages: [
+                    {
+                      role: "system",
+                      content: `
+Create a short title for this conversation.
+
+Rules:
+- Maximum 6 words.
+- Maximum 60 characters.
+- No quotation marks.
+- Do not use the words "Chat" or "Conversation".
+- Describe the main subject.
+- Do not invent information.
+- Return only the title.
+`
+                    },
+                    {
+                      role: "user",
+                      content: message
+                    }
+                  ],
+                  max_tokens: 30
+                }
+              );
+
+            let title =
+              extractAIResponse(titleResult);
+
+            title = title
+              .replace(/^["']|["']$/g, "")
+              .replace(/\n/g, " ")
+              .trim()
+              .slice(0, 60);
+
+            if (title) {
+              await env.DB
+                .prepare(`
+                  UPDATE conversations
+                  SET title = ?
+                  WHERE id = ?
+                  AND user_id = ?
+                `)
+                .bind(
+                  title,
+                  currentConversationId,
+                  userId
+                )
+                .run();
+            }
+
+          } catch (titleError) {
+            console.error(
+              "Title generation error:",
+              titleError
+            );
+          }
+        }
+
+        // ----------------------------------------------
+        // MEMORY EXTRACTION
+        // ----------------------------------------------
+
+        try {
+          const memoryCheck =
+            await env.AI.run(
+              MODEL,
               {
                 messages: [
                   {
                     role: "system",
                     content: `
-Create a very short title for this conversation.
+You manage permanent memory for My AI.
 
-Rules:
-- Maximum 6 words.
-- Do not use quotation marks.
-- Do not say "Chat".
-- Do not say "Conversation".
-- Describe the main subject.
-- Do not invent information.
+Look at the user's message and decide whether it contains
+useful long-term personal information that would genuinely
+help the assistant in future conversations.
+
+Useful examples:
+- Favourite things
+- Preferences
+- Hobbies
+- Long-term goals
+- Important projects
+- Things the user wants to learn
+- Names of important people, pets or projects
+- Stable personal preferences
+
+Do NOT save:
+- Questions
+- Temporary situations
+- General facts
+- One-off tasks
+- Calculations
+- Random comments
+- Sensitive information unless the user clearly intends
+  it to be remembered
+
+Never invent information.
+
+If there is useful memory, respond EXACTLY like:
+
+YES: [short specific memory]
+
+If there is nothing worth saving, respond exactly:
+
+NO
 `
                   },
                   {
@@ -516,166 +865,99 @@ Rules:
                     content: message
                   }
                 ],
-                max_tokens: 30
+                max_tokens: 100
               }
             );
 
-            let title =
-              (
-                titleResult.response ||
-                ""
-              ).trim();
+          const memoryDecision =
+            extractAIResponse(memoryCheck);
 
-            title =
-              title
-                .replace(
-                  /^["']|["']$/g,
-                  ""
-                )
-                .replace(
-                  /\n/g,
-                  " "
-                )
-                .trim();
-
-            if (
-              title &&
-              title.length > 0 &&
-              title.length < 80
-            ) {
-              await env.DB
-                .prepare(`
-                  UPDATE conversations
-                  SET title = ?
-                  WHERE id = ?
-                `)
-                .bind(
-                  title,
-                  currentConversationId
-                )
-                .run();
-            }
-
-          } catch (titleError) {
-            console.error(
-              "Title error:",
-              titleError
-            );
-          }
-        }
-
-
-        // ----------------------------------------------
-        // MEMORY EXTRACTION
-        // ----------------------------------------------
-
-        const memoryCheck = await env.AI.run(
-          "@cf/meta/llama-3.1-8b-instruct-fast",
-          {
-            messages: [
-              {
-                role: "system",
-                content: `
-You are the permanent memory system for My AI.
-
-Save only useful long-term personal information.
-
-Examples:
-- Favourite things
-- Personal preferences
-- Goals
-- Hobbies
-- Languages the user wants to learn
-- Important projects
-- Names
-- Other information that would genuinely help later
-
-Do NOT save:
-- Ordinary questions
-- General knowledge
-- Temporary conversation
-- One-off calculations
-- Random statements
-
-Never invent information.
-
-If useful information exists:
-
-YES: [specific memory]
-
-Otherwise:
-
-NO
-`
-              },
-              {
-                role: "user",
-                content: message
-              }
-            ],
-            max_tokens: 150
-          }
-        );
-
-        const memoryDecision =
-          (
-            memoryCheck.response ||
-            ""
-          ).trim();
-
-        if (
-          memoryDecision
-            .toUpperCase()
-            .startsWith("YES:")
-        ) {
-          const memory =
+          if (
             memoryDecision
-              .substring(4)
-              .trim();
+              .toUpperCase()
+              .startsWith("YES:")
+          ) {
+            const memory =
+              memoryDecision
+                .substring(4)
+                .trim()
+                .slice(0, 500);
 
-          if (memory.length > 0) {
-            await env.DB
-              .prepare(`
-                INSERT INTO memories
-                (user_id, memory)
-                VALUES (?, ?)
-              `)
-              .bind(
-                userId,
-                memory
-              )
-              .run();
+            if (memory) {
+              // Prevent exact duplicate memories.
+              const duplicate =
+                await env.DB
+                  .prepare(`
+                    SELECT id
+                    FROM memories
+                    WHERE user_id = ?
+                    AND LOWER(memory) = LOWER(?)
+                    LIMIT 1
+                  `)
+                  .bind(
+                    userId,
+                    memory
+                  )
+                  .first();
+
+              if (!duplicate) {
+                await env.DB
+                  .prepare(`
+                    INSERT INTO memories
+                    (user_id, memory)
+                    VALUES (?, ?)
+                  `)
+                  .bind(
+                    userId,
+                    memory
+                  )
+                  .run();
+              }
+            }
           }
-        }
 
+        } catch (memoryError) {
+          // Memory failure should never stop the user's
+          // main AI response from working.
+          console.error(
+            "Memory extraction error:",
+            memoryError
+          );
+        }
 
         // ----------------------------------------------
         // RETURN RESPONSE
         // ----------------------------------------------
 
-        return Response.json({
-          response,
-          conversationId:
-            currentConversationId
-        });
+        return json(
+          {
+            response,
+            conversationId:
+              currentConversationId
+          },
+          200,
+          headers
+        );
 
       } catch (error) {
-        console.error(error);
+        console.error(
+          "Chat error:",
+          error
+        );
 
-        return Response.json(
+        return json(
           {
-            error: error.message
+            error:
+              "Something went wrong while generating the response."
           },
-          {
-            status: 500
-          }
+          500,
+          headers
         );
       }
     }
 
-
     // ==================================================
-    // ASSETS
+    // SERVE WEBSITE
     // ==================================================
 
     return env.ASSETS.fetch(request);
