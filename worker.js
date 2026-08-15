@@ -43,8 +43,6 @@ function getUser(request) {
     };
   }
 
-  // Keep using the existing user so current conversations
-  // and memories continue to work.
   return {
     userId: "default-user",
     isNew: false
@@ -135,7 +133,6 @@ async function getConversationContext(db, conversationId, userId) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-
     const { userId } = getUser(request);
 
     // ==================================================
@@ -174,7 +171,6 @@ export default {
         return json({
           memories: result.results || []
         });
-
       } catch (error) {
         console.error("Memory fetch error:", error);
 
@@ -220,7 +216,6 @@ export default {
           success: true,
           deleted: (result.meta?.changes || 0) > 0
         });
-
       } catch (error) {
         console.error("Memory delete error:", error);
 
@@ -259,7 +254,6 @@ export default {
         return json({
           conversations: result.results || []
         });
-
       } catch (error) {
         console.error("Conversation list error:", error);
 
@@ -323,7 +317,6 @@ export default {
         return json({
           success: true
         });
-
       } catch (error) {
         console.error("Conversation rename error:", error);
 
@@ -392,7 +385,6 @@ export default {
         return json({
           success: true
         });
-
       } catch (error) {
         console.error("Conversation delete error:", error);
 
@@ -459,7 +451,6 @@ export default {
           conversation,
           messages: messages.results || []
         });
-
       } catch (error) {
         console.error("Conversation fetch error:", error);
 
@@ -617,15 +608,11 @@ export default {
           );
         }
 
-        // Prefer the actual saved conversation.
-        // Fall back to browser history if necessary.
         const conversationHistory =
           databaseHistory.length > 0
             ? databaseHistory
             : browserHistory;
 
-        // The last saved user message is already in D1.
-        // We don't want to duplicate it.
         const filteredHistory =
           conversationHistory.length > 0
             ? conversationHistory
@@ -754,7 +741,10 @@ ${message}
             MODEL,
             {
               messages: aiMessages,
-              max_tokens: 700
+              max_tokens: 700,
+              temperature: 0.35,
+              top_p: 0.9,
+              repetition_penalty: 1.08
             }
           );
 
@@ -872,7 +862,6 @@ Rules:
                 )
                 .run();
             }
-
           } catch (titleError) {
             console.error(
               "Title generation error:",
@@ -985,7 +974,6 @@ NO
               }
             }
           }
-
         } catch (memoryError) {
           console.error(
             "Memory extraction error:",
