@@ -15,8 +15,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "my-ai-db",
-      "database_id": "YOUR_DATABASE_ID",
+      "database_name": "my-ai-memory",
+      "database_id": "5a13b867-beb0-458a-aed4-07fa163443c6",
       "migrations_dir": "migrations"
     }
   ]
