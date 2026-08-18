@@ -7,9 +7,9 @@ Personal AI assistant built on Cloudflare Workers AI, D1 and Cloudflare Access.
 - Cloudflare Access authentication (Google identity continues to be validated by Access)
 - Existing conversations and memories, preserved with an additive D1 migration
 - Relevant long-term memory retrieval using Workers AI embeddings, with a graceful lexical fallback for existing memories
-- Opt-in web search with source labels
+- Automatic web search for questions that need current or online information, with source labels
 - Text, CSV, Markdown, JSON, PDF and image attachment handling in the chat composer
-- Browser-native speech input and optional read-aloud replies
+- Voice-first conversations: spoken turns are sent automatically and replies are read aloud
 - Profile and response-style settings
 - A private aggregate usage endpoint and dashboard for the configured admin email
 
