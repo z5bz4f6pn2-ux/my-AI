@@ -20,4 +20,3 @@ Apply the D1 migration before deploying the Worker. The migration only adds tabl
 Set `ADMIN_EMAIL` in your Worker environment to the email address allowed to view the private usage dashboard. Leave it blank to disable dashboard access. The variable is intentionally not a secret, but it should still be set per environment rather than committed with a personal address.
 
 The app uses the Cloudflare Workers AI binding already defined in `wrangler.jsonc`; semantic memory uses `@cf/baai/bge-base-en-v1.5`.
-

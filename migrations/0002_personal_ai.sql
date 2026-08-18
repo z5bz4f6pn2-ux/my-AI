@@ -21,4 +21,3 @@ CREATE TABLE IF NOT EXISTS usage_events (
 
 CREATE INDEX IF NOT EXISTS idx_usage_events_created
 ON usage_events(created_at DESC);
-

@@ -446,7 +446,7 @@
       padding:
         28px
         max(18px, calc((100vw - 950px) / 2))
-        180px;
+        270px;
 
       scroll-behavior: smooth;
     }
@@ -656,7 +656,7 @@
       align-items: center;
       justify-content: center;
 
-      min-height: 112px;
+      min-height: 166px;
 
       position: relative;
     }
@@ -695,17 +695,33 @@
       transform: none;
     }
 
-    #attachButton {
+    .attachment-actions {
       position: absolute;
-      top: 24px;
-      right: max(12px, calc(50% - 138px));
+      top: 10px;
+      right: max(10px, calc(50% - 160px));
+
+      display: grid;
+      gap: 6px;
+    }
+
+    .attachment-action {
+      min-height: 29px;
+
+      padding: 0 9px;
+
+      border: 1px solid var(--border-strong);
+      border-radius: 9px;
 
       background: rgba(255, 255, 255, 0.08);
       color: var(--text);
-      border: 1px solid var(--border-strong);
+
+      font-size: 11px;
+      font-weight: 600;
+
+      cursor: pointer;
     }
 
-    #attachButton:hover {
+    .attachment-action:hover {
       background: rgba(255, 255, 255, 0.14);
     }
 
@@ -713,6 +729,8 @@
       display: grid;
       justify-items: center;
       gap: 8px;
+
+      width: min(360px, calc(100vw - 28px));
     }
 
     .voice-orb {
@@ -835,6 +853,62 @@
       letter-spacing: -0.01em;
     }
 
+    .voice-typing-bar {
+      width: 100%;
+
+      display: flex;
+      align-items: flex-end;
+      gap: 7px;
+
+      padding: 7px;
+
+      border: 1px solid var(--border-strong);
+      border-radius: 17px;
+
+      background: rgba(255, 255, 255, 0.055);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+    }
+
+    #message {
+      flex: 1;
+      min-width: 0;
+      min-height: 28px;
+      max-height: 110px;
+
+      padding: 7px 8px;
+
+      resize: none;
+      border: 0;
+      outline: 0;
+
+      background: transparent;
+      color: var(--text);
+
+      font: inherit;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    #message::placeholder {
+      color: var(--muted-2);
+    }
+
+    #sendButton {
+      width: 36px;
+      height: 36px;
+
+      border-radius: 11px;
+
+      background: var(--text);
+      color: #111;
+      font-size: 17px;
+      font-weight: 800;
+    }
+
+    #sendButton:hover {
+      background: #ffffff;
+    }
+
     @keyframes voiceOrbBreathe {
       50% { transform: scale(1.045); }
     }
@@ -918,6 +992,9 @@
     .settings-form input, .settings-form select { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,.05); color: var(--text); }
     .settings-form .setting-check { display: flex; align-items: center; gap: 9px; }
     .settings-form .setting-check input { padding: 0; }
+    .settings-section-title { margin: 6px 0 -3px; color: var(--text); font-size: 14px; font-weight: 700; }
+    .voice-settings-note { margin: -5px 0 0; color: var(--muted-2); line-height: 1.45; }
+    .voice-test-button { justify-self: start; }
     .memory-header {
       display: flex;
       align-items: flex-start;
@@ -1160,7 +1237,7 @@
         padding:
           18px
           12px
-          150px;
+          240px;
       }
 
       .message {
@@ -1381,20 +1458,15 @@
 
         <div class="input-shell">
 
-          <input id="fileInput" type="file" multiple accept=".txt,.md,.csv,.json,.pdf,image/*" hidden>
+          <input id="fileInput" type="file" multiple accept=".txt,.md,.csv,.json,.pdf" hidden>
+          <input id="photoLibraryInput" type="file" multiple accept="image/*" hidden>
+          <input id="cameraInput" type="file" accept="image/*" capture="environment" hidden>
 
-          <textarea id="message" hidden aria-hidden="true"></textarea>
-
-
-          <button
-            id="attachButton"
-            class="send-button"
-            onclick="document.getElementById('fileInput').click()"
-            title="Attach a file"
-            aria-label="Attach a file"
-          >
-            +
-          </button>
+          <div class="attachment-actions" aria-label="Add an attachment">
+            <button class="attachment-action" onclick="document.getElementById('photoLibraryInput').click()">Photo library</button>
+            <button class="attachment-action" onclick="document.getElementById('cameraInput').click()">Take photo</button>
+            <button class="attachment-action" onclick="document.getElementById('fileInput').click()">Choose files</button>
+          </div>
 
           <div class="voice-control">
             <button
@@ -1407,6 +1479,10 @@
               <span class="voice-waves" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></span>
             </button>
             <span id="voiceButtonLabel" class="voice-label">Start talking</span>
+            <div class="voice-typing-bar">
+              <textarea id="message" rows="1" placeholder="Type a message…" autocomplete="off" spellcheck="true"></textarea>
+              <button id="sendButton" class="send-button" onclick="sendMessage()" title="Send message" aria-label="Send message">↑</button>
+            </div>
           </div>
 
         </div>
@@ -1427,7 +1503,12 @@
     <div class="settings-form">
       <label>Display name <input id="displayName" maxlength="80" placeholder="How should Tom's AI address you?"></label>
       <label>Response style <select id="responseStyle"><option value="balanced">Balanced</option><option value="concise">Concise</option><option value="detailed">Detailed</option></select></label>
-      <p>Voice replies are on during a voice conversation.</p>
+      <h3 class="settings-section-title">Voice</h3>
+      <p class="voice-settings-note">Choose the voice Tom's AI uses when it speaks from your phone.</p>
+      <label>Voice <select id="voiceSelect"><option value="">Loading voices…</option></select></label>
+      <label>Speaking speed <select id="voiceRate"><option value="0.85">Slower</option><option value="1" selected>Normal</option><option value="1.15">Faster</option></select></label>
+      <label class="setting-check"><input id="voiceReplies" type="checkbox" checked> Read replies aloud</label>
+      <button type="button" class="header-button voice-test-button" onclick="testVoice()">Test voice</button>
       <button class="header-button primary" onclick="saveProfile()">Save settings</button>
     </div>
   </div>
@@ -1501,6 +1582,11 @@
   let recognition = null;
   let voiceConversationActive = false;
   let assistantIsSpeaking = false;
+  let availableVoices = [];
+  let voiceOutputPrimed = false;
+  let listeningRestartTimer = null;
+  let speechStartTimer = null;
+  let speechRequestId = 0;
 
 
   /* ==================================================
@@ -1534,6 +1620,9 @@
     );
 
   const fileInput = document.getElementById("fileInput");
+  const photoLibraryInput = document.getElementById("photoLibraryInput");
+  const cameraInput = document.getElementById("cameraInput");
+  const sendButton = document.getElementById("sendButton");
   const voiceButton = document.getElementById("voiceButton");
   const voiceButtonLabel = document.getElementById("voiceButtonLabel");
   const voiceStatus = document.getElementById("voiceStatus");
@@ -1567,11 +1656,17 @@
     profile = data.profile;
     document.getElementById("displayName").value = profile.display_name || "";
     document.getElementById("responseStyle").value = profile.preferences?.responseStyle || "balanced";
+    document.getElementById("voiceRate").value = String(profile.preferences?.voiceRate || 1);
+    document.getElementById("voiceReplies").checked = profile.preferences?.voiceReplies !== false;
+    populateVoiceOptions();
   }
 
   async function saveProfile() {
     const preferences = {
-      responseStyle: document.getElementById("responseStyle").value
+      responseStyle: document.getElementById("responseStyle").value,
+      voiceName: document.getElementById("voiceSelect").value || "",
+      voiceRate: Number(document.getElementById("voiceRate").value) || 1,
+      voiceReplies: document.getElementById("voiceReplies").checked
     };
     const response = await fetch("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ displayName: document.getElementById("displayName").value, preferences }) });
     const data = await response.json();
@@ -1597,6 +1692,104 @@
     voiceStatus.textContent = text;
   }
 
+  function populateVoiceOptions() {
+    const select = document.getElementById("voiceSelect");
+    if (!("speechSynthesis" in window)) {
+      select.innerHTML = '<option value="">Voice output is not supported</option>';
+      select.disabled = true;
+      return;
+    }
+
+    availableVoices = speechSynthesis.getVoices();
+    if (!availableVoices.length) {
+      select.innerHTML = '<option value="">Loading voices…</option>';
+      select.disabled = true;
+      return;
+    }
+
+    const savedVoice = profile.preferences?.voiceName || select.value || "";
+    select.replaceChildren();
+    select.add(new Option("Default phone voice", ""));
+    availableVoices.forEach(voice => {
+      select.add(new Option(`${voice.name} (${voice.lang})`, voice.name));
+    });
+    select.value = availableVoices.some(voice => voice.name === savedVoice) ? savedVoice : "";
+    select.disabled = false;
+  }
+
+  function selectedVoice() {
+    const selectedName = document.getElementById("voiceSelect").value || profile.preferences?.voiceName || "";
+    return availableVoices.find(voice => voice.name === selectedName) || null;
+  }
+
+  function createVoiceUtterance(text) {
+    const utterance = new SpeechSynthesisUtterance(text);
+    const voice = selectedVoice();
+    if (voice) utterance.voice = voice;
+    utterance.lang = voice?.lang || navigator.language || "en-GB";
+    utterance.rate = Number(document.getElementById("voiceRate").value || profile.preferences?.voiceRate || 1);
+    return utterance;
+  }
+
+  function primeVoiceOutput() {
+    if (!("speechSynthesis" in window) || voiceOutputPrimed) return;
+
+    voiceOutputPrimed = true;
+    const primer = createVoiceUtterance(" ");
+    primer.volume = 0;
+    speechSynthesis.speak(primer);
+  }
+
+  function scheduleListening(delay = 350) {
+    clearTimeout(listeningRestartTimer);
+    if (!voiceConversationActive) return;
+    listeningRestartTimer = setTimeout(() => startListening(), delay);
+  }
+
+  function resumeVoiceListening() {
+    clearTimeout(speechStartTimer);
+    assistantIsSpeaking = false;
+    if (voiceConversationActive) {
+      setVoiceStatus("Listening… speak naturally.");
+      scheduleListening();
+    } else {
+      setVoiceStatus("Tap Start talking when you are ready.");
+    }
+    updateVoiceButton();
+  }
+
+  function testVoice() {
+    if (!("speechSynthesis" in window)) {
+      return showToast("Voice output is not supported in this browser.");
+    }
+
+    populateVoiceOptions();
+    const requestId = ++speechRequestId;
+    speechSynthesis.cancel();
+    voiceOutputPrimed = true;
+    assistantIsSpeaking = true;
+    const utterance = createVoiceUtterance("Hello, I am Tom's AI. This is the voice I will use on your phone.");
+    utterance.onstart = () => {
+      if (requestId !== speechRequestId) return;
+      setVoiceStatus("Testing Tom's AI voice…");
+      updateVoiceButton();
+    };
+    utterance.onend = () => {
+      if (requestId === speechRequestId) resumeVoiceListening();
+    };
+    utterance.onerror = () => {
+      if (requestId !== speechRequestId) return;
+      showToast("Your phone did not start the voice. Check media volume and try another voice.");
+      resumeVoiceListening();
+    };
+    speechSynthesis.speak(utterance);
+  }
+
+  if ("speechSynthesis" in window) {
+    populateVoiceOptions();
+    speechSynthesis.addEventListener("voiceschanged", populateVoiceOptions);
+  }
+
   function updateVoiceButton() {
     const active = voiceConversationActive || recognition || assistantIsSpeaking;
     voiceButton.classList.toggle("active", Boolean(active));
@@ -1612,6 +1805,7 @@
     }
 
     voiceConversationActive = true;
+    primeVoiceOutput();
     setVoiceStatus("Listening… speak naturally.");
     updateVoiceButton();
     startListening();
@@ -1619,6 +1813,9 @@
 
   function stopVoiceConversation() {
     voiceConversationActive = false;
+    speechRequestId += 1;
+    clearTimeout(listeningRestartTimer);
+    clearTimeout(speechStartTimer);
     if (recognition) recognition.stop();
     if ("speechSynthesis" in window) speechSynthesis.cancel();
     assistantIsSpeaking = false;
@@ -1635,10 +1832,12 @@
     }
     if (recognition || isSending || assistantIsSpeaking || !voiceConversationActive) return;
 
+    clearTimeout(listeningRestartTimer);
     let heardSpeech = false;
+    let finalTranscript = "";
     recognition = new SpeechRecognition();
     recognition.lang = navigator.language || "en-GB";
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.maxAlternatives = 1;
     recognition.onstart = () => {
       setVoiceStatus("Listening… speak naturally.");
@@ -1648,7 +1847,7 @@
       recognition = null;
       if (voiceConversationActive && !heardSpeech && !isSending && !assistantIsSpeaking) {
         setVoiceStatus("I didn't catch that. Tap End voice conversation to stop, or speak again.");
-        setTimeout(startListening, 450);
+        scheduleListening(450);
       }
       updateVoiceButton();
     };
@@ -1659,11 +1858,29 @@
       }
     };
     recognition.onresult = event => {
-      const transcript = event.results?.[0]?.[0]?.transcript?.trim();
-      if (!transcript) return;
+      let interimTranscript = "";
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const transcript = event.results[index]?.[0]?.transcript || "";
+        if (event.results[index].isFinal) {
+          finalTranscript += ` ${transcript}`;
+        } else {
+          interimTranscript += ` ${transcript}`;
+        }
+      }
+
+      const visibleTranscript = (finalTranscript || interimTranscript).trim();
+      if (!visibleTranscript) return;
+      messageInput.value = visibleTranscript;
+      autoResizeMessageInput();
+
+      if (!finalTranscript.trim()) {
+        setVoiceStatus("Listening…");
+        return;
+      }
+
       heardSpeech = true;
-      messageInput.value = transcript;
       setVoiceStatus("Thinking…");
+      recognition.stop();
       sendMessage();
     };
     try {
@@ -1676,37 +1893,41 @@
   }
 
   function speakReply(reply) {
-    if (!voiceConversationActive) return;
+    if (!document.getElementById("voiceReplies").checked) return;
 
     if (!("speechSynthesis" in window)) {
       setVoiceStatus("Your browser cannot read replies aloud.");
       return;
     }
 
+    clearTimeout(speechStartTimer);
+    const requestId = ++speechRequestId;
     speechSynthesis.cancel();
     assistantIsSpeaking = true;
-    const utterance = new SpeechSynthesisUtterance(reply);
-    utterance.lang = navigator.language || "en-GB";
+    let playbackStarted = false;
+    const utterance = createVoiceUtterance(reply);
     utterance.onstart = () => {
+      if (requestId !== speechRequestId) return;
+      playbackStarted = true;
+      clearTimeout(speechStartTimer);
       setVoiceStatus("Tom's AI is speaking…");
       updateVoiceButton();
     };
     utterance.onend = () => {
-      assistantIsSpeaking = false;
-      if (voiceConversationActive) {
-        setVoiceStatus("Listening… speak naturally.");
-        startListening();
-      } else {
-        setVoiceStatus("Tap Start talking when you are ready.");
-      }
-      updateVoiceButton();
+      if (requestId === speechRequestId) resumeVoiceListening();
     };
     utterance.onerror = () => {
-      assistantIsSpeaking = false;
-      if (voiceConversationActive) startListening();
-      updateVoiceButton();
+      if (requestId !== speechRequestId) return;
+      showToast("Voice playback could not start. Use Test voice in Settings to choose another phone voice.");
+      resumeVoiceListening();
     };
     speechSynthesis.speak(utterance);
+    speechStartTimer = setTimeout(() => {
+      if (requestId === speechRequestId && !playbackStarted && assistantIsSpeaking) {
+        showToast("Voice playback did not start. Open Settings and use Test voice.");
+        resumeVoiceListening();
+      }
+    }, 2500);
   }
 
   async function extractAttachment(file) {
@@ -1725,13 +1946,36 @@
     return { name: file.name, type: file.type, text: (await file.text()).slice(0, 12000) };
   }
 
-  fileInput.addEventListener("change", async () => {
+  async function addAttachments(input) {
+    const remainingSlots = 3 - pendingAttachments.length;
+    if (remainingSlots <= 0) {
+      input.value = "";
+      return showToast("You can add up to three attachments to one message.");
+    }
+
     try {
-      const extracted = await Promise.all([...fileInput.files].slice(0, 3).map(extractAttachment));
+      const extracted = await Promise.all([...input.files].slice(0, remainingSlots).map(extractAttachment));
       pendingAttachments.push(...extracted);
       showToast(`${extracted.length} attachment${extracted.length === 1 ? "" : "s"} ready.`);
     } catch (error) { showToast(error.message || "Couldn't read that attachment."); }
-    fileInput.value = "";
+    input.value = "";
+  }
+
+  [fileInput, photoLibraryInput, cameraInput].forEach(input => {
+    input.addEventListener("change", () => addAttachments(input));
+  });
+
+  function autoResizeMessageInput() {
+    messageInput.style.height = "auto";
+    messageInput.style.height = `${Math.min(messageInput.scrollHeight, 110)}px`;
+  }
+
+  messageInput.addEventListener("input", autoResizeMessageInput);
+  messageInput.addEventListener("keydown", event => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      sendMessage();
+    }
   });
 
 
@@ -2494,6 +2738,8 @@
 
     isSending = true;
 
+    sendButton.disabled = true;
+
 
     const welcome =
       chatElement.querySelector(".welcome");
@@ -2515,6 +2761,8 @@
 
 
     messageInput.value = "";
+
+    autoResizeMessageInput();
 
     conversationHistory.push({
       role: "user",
@@ -2702,6 +2950,8 @@
     } finally {
 
       isSending = false;
+
+      sendButton.disabled = false;
 
       scrollChat();
 
@@ -2944,9 +3194,10 @@
 
   loadConversations();
 
+  autoResizeMessageInput();
+
   updateVoiceButton();
 </script>
 
 </body>
 </html>
-

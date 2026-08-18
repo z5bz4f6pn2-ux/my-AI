@@ -39,4 +39,3 @@ jobs:
 
       - name: Deploy Worker
         run: npx --yes wrangler@4.123.0 deploy
-

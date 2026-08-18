@@ -365,10 +365,16 @@ function shouldSearchWeb(message) {
   const asksForTheWeb = /\b(?:search(?:\s+the)?\s+web|look(?:\s+it)?\s+up|online)\b/i;
   const needsCurrentInformation = /\b(?:latest|current|today|tomorrow|tonight|this\s+(?:week|month|year)|recent|news|weather|forecast|temperature|rain|price|prices|cost|stock|share\s+price|market|exchange\s+rate|score|scores|fixture|fixtures|schedule|opening\s+hours|open\s+now|release\s+date|availability|outage|status|who\s+won|election|result|results|president|prime\s+minister|ceo|mayor|governor|time\s+(?:is|in))\b/i;
   const needsLocalOrLiveInformation = /\b(?:near\s+me|nearby|restaurant|hotel|flight|event|events|concert|showtimes)\b/i;
+  const needsVideo = /\b(?:video|youtube|watch(?:\s+(?:a|the))?\s+(?:video|clip)|clip)\b/i;
 
   return asksForTheWeb.test(message) ||
     needsCurrentInformation.test(message) ||
-    needsLocalOrLiveInformation.test(message);
+    needsLocalOrLiveInformation.test(message) ||
+    needsVideo.test(message);
+}
+
+function wantsVideoLink(message) {
+  return /\b(?:video|youtube|watch(?:\s+(?:a|the))?\s+(?:video|clip)|clip)\b/i.test(message);
 }
 
 
@@ -1178,6 +1184,17 @@ export default {
         if (webSearchRequested) {
           try { webResults = await searchWeb(message); } catch (error) { console.warn("Web search failed", error); }
         }
+        if (wantsVideoLink(message)) {
+          const query = encodeURIComponent(message.slice(0, 300));
+          webResults = [
+            {
+              title: "Search YouTube for this video",
+              url: `https://www.youtube.com/results?search_query=${query}`,
+              snippet: "Open this direct YouTube search to choose a relevant video."
+            },
+            ...webResults
+          ].slice(0, 5);
+        }
         const webText = webResults.length
           ? webResults.map((result, index) => `[${index + 1}] ${result.title}\n${result.snippet}\nSource: ${result.url}`).join("\n\n")
           : "No current web information was needed or available.";
@@ -1333,6 +1350,10 @@ Do not invent connections between unrelated memories.
 WEB RESULTS (provided automatically only when the question needs current or online information; only cite these as [1], [2], etc.; say when results are insufficient):
 
 ${webText}
+
+LINKS AND VIDEOS:
+
+You can share HTTP or HTTPS links directly in your reply. When the user asks for a video, use the supplied web results and include a direct, clickable link. If there is no precise video result, give the supplied YouTube search link. Never say that you are text-only or cannot share video links.
 
 ATTACHMENTS (treat as user-provided source material):
 
@@ -1705,4 +1726,3 @@ NO
     );
   }
 };
-
