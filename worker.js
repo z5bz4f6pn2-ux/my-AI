@@ -283,6 +283,138 @@ function extractAIResponse(result) {
   return "";
 }
 
+
+function asksForCurrentDateOrTime(message) {
+
+  if (typeof message !== "string") {
+    return false;
+  }
+
+  const mentionsDateOrTime =
+    /\b(?:date|day|time)\b/i.test(message);
+
+  const asksForNow =
+    /\b(?:now|right\s+now|current|currently|today)\b/i.test(message) ||
+    /\bwhat(?:'s|\s+is)\s+(?:the\s+)?(?:date|day|time)\b/i.test(message) ||
+    /\bwhat\s+(?:date|day|time)\s+is\s+it\b/i.test(message);
+
+  return mentionsDateOrTime && asksForNow;
+}
+
+
+function getCurrentDateTimeContext(body) {
+
+  const now = new Date();
+  const requestedTimeZone =
+    cleanText(
+      body?.clientTimeZone,
+      80
+    );
+
+  let timeZone = "UTC";
+  let timeZoneLabel = "UTC";
+  let displayDate = now;
+
+  if (requestedTimeZone) {
+
+    try {
+
+      new Intl.DateTimeFormat(
+        "en-GB",
+        { timeZone: requestedTimeZone }
+      ).format(now);
+
+      timeZone = requestedTimeZone;
+      timeZoneLabel = requestedTimeZone;
+
+    } catch (error) {
+
+      console.warn(
+        "Invalid client time zone; using UTC offset fallback.",
+        requestedTimeZone
+      );
+    }
+  }
+
+  if (
+    timeZone === "UTC" &&
+    requestedTimeZone !== "UTC"
+  ) {
+
+    const requestedOffset =
+      Number(
+        body?.clientUtcOffsetMinutes
+      );
+
+    if (
+      Number.isFinite(requestedOffset) &&
+      requestedOffset >= -840 &&
+      requestedOffset <= 840
+    ) {
+
+      displayDate =
+        new Date(
+          now.getTime() +
+          requestedOffset * 60 * 1000
+        );
+
+      const sign =
+        requestedOffset >= 0
+          ? "+"
+          : "-";
+
+      const absoluteOffset =
+        Math.abs(requestedOffset);
+
+      const offsetHours =
+        String(
+          Math.floor(
+            absoluteOffset / 60
+          )
+        ).padStart(2, "0");
+
+      const offsetMinutes =
+        String(
+          absoluteOffset % 60
+        ).padStart(2, "0");
+
+      timeZoneLabel =
+        `UTC${sign}${offsetHours}:${offsetMinutes}`;
+    }
+  }
+
+  const date =
+    new Intl.DateTimeFormat(
+      "en-GB",
+      {
+        timeZone,
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric"
+      }
+    ).format(displayDate);
+
+  const time =
+    new Intl.DateTimeFormat(
+      "en-GB",
+      {
+        timeZone,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false
+      }
+    ).format(displayDate);
+
+  return {
+    date,
+    time,
+    timeZone: timeZoneLabel,
+    utc: now.toISOString()
+  };
+}
+
 const EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5";
 
 async function createEmbedding(env, text) {
@@ -368,6 +500,8 @@ async function searchWeb(query) {
 }
 
 function shouldSearchWeb(message) {
+  if (asksForCurrentDateOrTime(message)) return false;
+
   const asksForTheWeb = /\b(?:search(?:\s+the)?\s+web|look(?:\s+it)?\s+up|online)\b/i;
   const needsCurrentInformation = /\b(?:latest|current|today|tomorrow|tonight|this\s+(?:week|month|year)|recent|news|weather|forecast|temperature|rain|price|prices|cost|stock|share\s+price|market|exchange\s+rate|score|scores|fixture|fixtures|schedule|opening\s+hours|open\s+now|release\s+date|availability|outage|status|who\s+won|election|result|results|president|prime\s+minister|ceo|mayor|governor|time\s+(?:is|in))\b/i;
   const needsLocalOrLiveInformation = /\b(?:near\s+me|nearby|restaurant|hotel|flight|event|events|concert|showtimes)\b/i;
@@ -1145,6 +1279,11 @@ export default {
           body?.conversationId ||
           null;
 
+        const currentDateTime =
+          getCurrentDateTimeContext(
+            body
+          );
+
         const webSearchRequested = shouldSearchWeb(message);
         const attachments = Array.isArray(body?.attachments)
           ? body.attachments.slice(0, 3).map(file => ({
@@ -1408,6 +1547,16 @@ use the correct mechanism.
 
 If something is uncertain, say so.
 
+CURRENT DATE AND TIME:
+
+The user's current local date is ${currentDateTime.date}.
+
+The user's current local time is ${currentDateTime.time} in ${currentDateTime.timeZone}.
+
+The current UTC timestamp is ${currentDateTime.utc}.
+
+Treat this date and time as authoritative for this response. Use it for related calculations. When asked for the current date or time, answer directly and never claim that you lack real-time access to it.
+
 CONVERSATION:
 
 Use previous messages when relevant.
@@ -1461,24 +1610,38 @@ ${message}
         ];
 
 
-        const result =
-          await env.AI.run(
-            MODEL,
-            {
-              messages: aiMessages,
-              max_tokens: 700,
-              temperature: 0.35,
-              top_p: 0.9,
-              repetition_penalty: 1.08
-            }
-          );
+        let response;
+
+        if (
+          asksForCurrentDateOrTime(
+            message
+          )
+        ) {
+
+          response =
+            `It is ${currentDateTime.time} on ${currentDateTime.date} (${currentDateTime.timeZone}).`;
+
+        } else {
+
+          const result =
+            await env.AI.run(
+              MODEL,
+              {
+                messages: aiMessages,
+                max_tokens: 700,
+                temperature: 0.35,
+                top_p: 0.9,
+                repetition_penalty: 1.08
+              }
+            );
 
 
-        const response =
-          extractAIResponse(
-            result
-          ) ||
-          "I'm sorry, I wasn't able to generate a response.";
+          response =
+            extractAIResponse(
+              result
+            ) ||
+            "I'm sorry, I wasn't able to generate a response.";
+        }
 
 
         /* ----------------------------------------------

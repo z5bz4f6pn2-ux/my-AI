@@ -3068,7 +3068,14 @@ function primeVoiceOutput() {
                   ),
                 conversationId,
                 attachments: pendingAttachments,
-                preferences: profile.preferences || {}
+                preferences: profile.preferences || {},
+                clientTimeZone:
+                  Intl.DateTimeFormat()
+                    .resolvedOptions()
+                    .timeZone || "",
+                clientUtcOffsetMinutes:
+                  -new Date()
+                    .getTimezoneOffset()
               })
           }
         );
