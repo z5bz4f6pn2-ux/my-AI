@@ -1,4 +1,4 @@
-# My AI
+# Tom's AI
 
 Personal AI assistant built on Cloudflare Workers AI, D1 and Cloudflare Access.
 

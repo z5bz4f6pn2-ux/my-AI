@@ -8,7 +8,7 @@ const MODEL =
 
 const MAX_CONTEXT_MESSAGES = 24;
 
-// Cloudflare Access configuration for your My AI application.
+// Cloudflare Access configuration for your Tom's AI application.
 const TEAM_DOMAIN =
   "https://shrill-snowflake-7123.cloudflareaccess.com";
 
@@ -361,6 +361,16 @@ async function searchWeb(query) {
   return results.slice(0, 5);
 }
 
+function shouldSearchWeb(message) {
+  const asksForTheWeb = /\b(?:search(?:\s+the)?\s+web|look(?:\s+it)?\s+up|online)\b/i;
+  const needsCurrentInformation = /\b(?:latest|current|today|tomorrow|tonight|this\s+(?:week|month|year)|recent|news|weather|forecast|temperature|rain|price|prices|cost|stock|share\s+price|market|exchange\s+rate|score|scores|fixture|fixtures|schedule|opening\s+hours|open\s+now|release\s+date|availability|outage|status|who\s+won|election|result|results|president|prime\s+minister|ceo|mayor|governor|time\s+(?:is|in))\b/i;
+  const needsLocalOrLiveInformation = /\b(?:near\s+me|nearby|restaurant|hotel|flight|event|events|concert|showtimes)\b/i;
+
+  return asksForTheWeb.test(message) ||
+    needsCurrentInformation.test(message) ||
+    needsLocalOrLiveInformation.test(message);
+}
+
 
 /* ==================================================
    CONVERSATION CONTEXT
@@ -528,7 +538,7 @@ export default {
 
       return json({
         ok: true,
-        service: "My AI",
+        service: "Tom's AI",
         authenticated: true,
         user:
           email || "authenticated user"
@@ -1050,7 +1060,7 @@ export default {
           body?.conversationId ||
           null;
 
-        const webSearchRequested = body?.webSearch === true;
+        const webSearchRequested = shouldSearchWeb(message);
         const attachments = Array.isArray(body?.attachments)
           ? body.attachments.slice(0, 3).map(file => ({
               name: cleanText(file?.name, 160),
@@ -1170,7 +1180,7 @@ export default {
         }
         const webText = webResults.length
           ? webResults.map((result, index) => `[${index + 1}] ${result.title}\n${result.snippet}\nSource: ${result.url}`).join("\n\n")
-          : "No web results were requested or available.";
+          : "No current web information was needed or available.";
         const attachmentText = attachments.length
           ? attachments.map(file => `File: ${file.name} (${file.type || "unknown type"})\n${file.text || "No extractable text."}`).join("\n\n")
           : "No attachments.";
@@ -1221,7 +1231,7 @@ export default {
            ---------------------------------------------- */
 
         const systemPrompt = `
-You are My AI.
+You are Tom's AI.
 
 You are a capable, intelligent personal assistant.
 
@@ -1320,7 +1330,7 @@ Only use a memory when genuinely relevant.
 
 Do not invent connections between unrelated memories.
 
-WEB RESULTS (only cite these as [1], [2], etc.; say when results are insufficient):
+WEB RESULTS (provided automatically only when the question needs current or online information; only cite these as [1], [2], etc.; say when results are insufficient):
 
 ${webText}
 
@@ -1528,7 +1538,7 @@ Rules:
                   {
                     role: "system",
                     content: `
-You manage permanent memory for My AI.
+You manage permanent memory for Tom's AI.
 
 Decide whether the user's message contains useful,
 long-term personal information that would genuinely

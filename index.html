@@ -13,7 +13,7 @@
     content="#0b0b0d"
   >
 
-  <title>My AI</title>
+  <title>Tom's AI</title>
 
   <style>
     :root {
@@ -627,7 +627,7 @@
       margin: 0 auto;
 
       display: flex;
-      align-items: flex-end;
+      align-items: center;
       gap: 9px;
 
       padding: 8px;
@@ -644,32 +644,6 @@
         var(--panel);
 
       box-shadow: var(--shadow);
-    }
-
-    #message {
-      flex: 1;
-
-      width: 100%;
-      min-width: 0;
-      min-height: 42px;
-      max-height: 160px;
-
-      resize: none;
-
-      padding: 11px 12px;
-
-      border: 0;
-      outline: 0;
-
-      background: transparent;
-      color: var(--text);
-
-      line-height: 1.45;
-      font-size: 16px;
-    }
-
-    #message::placeholder {
-      color: var(--muted-2);
     }
 
     .send-button {
@@ -704,6 +678,50 @@
       cursor: not-allowed;
       opacity: 0.45;
       transform: none;
+    }
+
+    .voice-button {
+      min-height: 44px;
+      flex: 1;
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+
+      padding: 10px 16px;
+
+      border-radius: 14px;
+
+      background: var(--text);
+      color: #111;
+
+      font: inherit;
+      font-weight: 650;
+
+      cursor: pointer;
+
+      transition:
+        transform 0.15s ease,
+        background 0.15s ease;
+    }
+
+    .voice-button:hover {
+      background: #ffffff;
+    }
+
+    .voice-button:active {
+      transform: scale(0.98);
+    }
+
+    .voice-button.active {
+      background: #a98cff;
+      color: #130e22;
+    }
+
+    .voice-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
     }
 
     .input-hint {
@@ -775,8 +793,6 @@
     .settings-form input, .settings-form select { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,.05); color: var(--text); }
     .settings-form .setting-check { display: flex; align-items: center; gap: 9px; }
     .settings-form .setting-check input { padding: 0; }
-    #webButton.active, #voiceButton.active { color: #b9a4ff; border-color: #8f72ff; }
-
     .memory-header {
       display: flex;
       align-items: flex-start;
@@ -1098,7 +1114,7 @@
       <div class="brand-text">
 
         <div class="brand-title">
-          My AI
+          Tom's AI
         </div>
 
         <div class="brand-subtitle">
@@ -1242,13 +1258,7 @@
 
           <input id="fileInput" type="file" multiple accept=".txt,.md,.csv,.json,.pdf,image/*" hidden>
 
-          <textarea
-            id="message"
-            rows="1"
-            placeholder="Message My AI..."
-            autocomplete="off"
-            spellcheck="true"
-          ></textarea>
+          <textarea id="message" hidden aria-hidden="true"></textarea>
 
 
           <button
@@ -1263,39 +1273,20 @@
 
           <button
             id="voiceButton"
-            class="send-button"
-            onclick="toggleVoiceInput()"
-            title="Voice input"
-            aria-label="Voice input"
+            class="voice-button"
+            onclick="toggleVoiceConversation()"
+            title="Start a voice conversation"
+            aria-label="Start a voice conversation"
           >
-            ◉
-          </button>
-
-          <button
-            id="webButton"
-            class="send-button"
-            onclick="toggleWebSearch()"
-            title="Use web search"
-            aria-label="Use web search"
-          >
-            ◌
-          </button>
-
-          <button
-            id="sendButton"
-            class="send-button"
-            onclick="sendMessage()"
-            title="Send"
-            aria-label="Send message"
-          >
-            ↑
+            <span aria-hidden="true">🎙</span>
+            <span id="voiceButtonLabel">Start talking</span>
           </button>
 
         </div>
 
 
-        <div class="input-hint">
-          Press Enter to send · Shift + Enter for a new line · ◌ web search
+        <div id="voiceStatus" class="input-hint" aria-live="polite">
+          Tap Start talking. Tom's AI will listen and reply aloud.
         </div>
 
       </div>
@@ -1305,11 +1296,11 @@
   </div>
 
   <div id="settingsPanel" class="memory-panel">
-    <div class="memory-header"><div class="memory-heading"><h2>Profile & settings</h2><p>Personalise how My AI responds.</p></div><button class="close-memory" onclick="toggleSettingsPanel()">✕</button></div>
+    <div class="memory-header"><div class="memory-heading"><h2>Profile & settings</h2><p>Personalise how Tom's AI responds.</p></div><button class="close-memory" onclick="toggleSettingsPanel()">✕</button></div>
     <div class="settings-form">
-      <label>Display name <input id="displayName" maxlength="80" placeholder="How should My AI address you?"></label>
+      <label>Display name <input id="displayName" maxlength="80" placeholder="How should Tom's AI address you?"></label>
       <label>Response style <select id="responseStyle"><option value="balanced">Balanced</option><option value="concise">Concise</option><option value="detailed">Detailed</option></select></label>
-      <label class="setting-check"><input id="speakReplies" type="checkbox"> Read replies aloud</label>
+      <p>Voice replies are on during a voice conversation.</p>
       <button class="header-button primary" onclick="saveProfile()">Save settings</button>
     </div>
   </div>
@@ -1335,7 +1326,7 @@
         </h2>
 
         <p>
-          Long-term information My AI has saved about you.
+          Long-term information Tom's AI has saved about you.
         </p>
 
       </div>
@@ -1378,10 +1369,11 @@
   let conversationId = null;
   let isSending = false;
   let toastTimer = null;
-  let webSearchEnabled = false;
   let pendingAttachments = [];
   let profile = { preferences: {} };
   let recognition = null;
+  let voiceConversationActive = false;
+  let assistantIsSpeaking = false;
 
 
   /* ==================================================
@@ -1393,9 +1385,6 @@
 
   const messageInput =
     document.getElementById("message");
-
-  const sendButton =
-    document.getElementById("sendButton");
 
   const sidebar =
     document.getElementById("sidebar");
@@ -1418,14 +1407,9 @@
     );
 
   const fileInput = document.getElementById("fileInput");
-  const webButton = document.getElementById("webButton");
   const voiceButton = document.getElementById("voiceButton");
-
-  function toggleWebSearch() {
-    webSearchEnabled = !webSearchEnabled;
-    webButton.classList.toggle("active", webSearchEnabled);
-    showToast(webSearchEnabled ? "Web search enabled for this message." : "Web search disabled.");
-  }
+  const voiceButtonLabel = document.getElementById("voiceButtonLabel");
+  const voiceStatus = document.getElementById("voiceStatus");
 
   function toggleSettingsPanel() {
     const panel = document.getElementById("settingsPanel");
@@ -1440,13 +1424,11 @@
     profile = data.profile;
     document.getElementById("displayName").value = profile.display_name || "";
     document.getElementById("responseStyle").value = profile.preferences?.responseStyle || "balanced";
-    document.getElementById("speakReplies").checked = Boolean(profile.preferences?.speakReplies);
   }
 
   async function saveProfile() {
     const preferences = {
-      responseStyle: document.getElementById("responseStyle").value,
-      speakReplies: document.getElementById("speakReplies").checked
+      responseStyle: document.getElementById("responseStyle").value
     };
     const response = await fetch("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ displayName: document.getElementById("displayName").value, preferences }) });
     const data = await response.json();
@@ -1468,18 +1450,120 @@
 
   function closeAdminPanel() { document.getElementById("adminPanel").style.display = "none"; }
 
-  function toggleVoiceInput() {
+  function setVoiceStatus(text) {
+    voiceStatus.textContent = text;
+  }
+
+  function updateVoiceButton() {
+    const active = voiceConversationActive || recognition || assistantIsSpeaking;
+    voiceButton.classList.toggle("active", Boolean(active));
+    voiceButtonLabel.textContent = voiceConversationActive ? "End voice conversation" : "Start talking";
+    voiceButton.title = voiceConversationActive ? "End voice conversation" : "Start a voice conversation";
+    voiceButton.setAttribute("aria-label", voiceButton.title);
+  }
+
+  function toggleVoiceConversation() {
+    if (voiceConversationActive) {
+      stopVoiceConversation();
+      return;
+    }
+
+    voiceConversationActive = true;
+    setVoiceStatus("Listening… speak naturally.");
+    updateVoiceButton();
+    startListening();
+  }
+
+  function stopVoiceConversation() {
+    voiceConversationActive = false;
+    if (recognition) recognition.stop();
+    if ("speechSynthesis" in window) speechSynthesis.cancel();
+    assistantIsSpeaking = false;
+    setVoiceStatus("Voice conversation ended. Tap Start talking when you are ready.");
+    updateVoiceButton();
+  }
+
+  function startListening() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return showToast("Voice input is not supported in this browser.");
-    if (recognition) { recognition.stop(); return; }
+    if (!SpeechRecognition) {
+      voiceConversationActive = false;
+      updateVoiceButton();
+      return showToast("Voice conversation is not supported in this browser. Try Chrome or Safari on your phone.");
+    }
+    if (recognition || isSending || assistantIsSpeaking || !voiceConversationActive) return;
+
+    let heardSpeech = false;
     recognition = new SpeechRecognition();
     recognition.lang = navigator.language || "en-GB";
     recognition.interimResults = false;
-    recognition.onstart = () => voiceButton.classList.add("active");
-    recognition.onend = () => { recognition = null; voiceButton.classList.remove("active"); };
-    recognition.onerror = () => showToast("Voice input couldn't start.");
-    recognition.onresult = event => { messageInput.value += (messageInput.value ? " " : "") + event.results[0][0].transcript; autoResizeInput(); };
-    recognition.start();
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => {
+      setVoiceStatus("Listening… speak naturally.");
+      updateVoiceButton();
+    };
+    recognition.onend = () => {
+      recognition = null;
+      if (voiceConversationActive && !heardSpeech && !isSending && !assistantIsSpeaking) {
+        setVoiceStatus("I didn't catch that. Tap End voice conversation to stop, or speak again.");
+        setTimeout(startListening, 450);
+      }
+      updateVoiceButton();
+    };
+    recognition.onerror = event => {
+      if (event.error !== "aborted" && event.error !== "no-speech") {
+        voiceConversationActive = false;
+        showToast("Microphone couldn't start. Check your browser microphone permission.");
+      }
+    };
+    recognition.onresult = event => {
+      const transcript = event.results?.[0]?.[0]?.transcript?.trim();
+      if (!transcript) return;
+      heardSpeech = true;
+      messageInput.value = transcript;
+      setVoiceStatus("Thinking…");
+      sendMessage();
+    };
+    try {
+      recognition.start();
+    } catch (error) {
+      voiceConversationActive = false;
+      updateVoiceButton();
+      showToast("Microphone couldn't start. Try again in a moment.");
+    }
+  }
+
+  function speakReply(reply) {
+    if (!voiceConversationActive) return;
+
+    if (!("speechSynthesis" in window)) {
+      setVoiceStatus("Your browser cannot read replies aloud.");
+      return;
+    }
+
+    speechSynthesis.cancel();
+    assistantIsSpeaking = true;
+    const utterance = new SpeechSynthesisUtterance(reply);
+    utterance.lang = navigator.language || "en-GB";
+    utterance.onstart = () => {
+      setVoiceStatus("Tom's AI is speaking…");
+      updateVoiceButton();
+    };
+    utterance.onend = () => {
+      assistantIsSpeaking = false;
+      if (voiceConversationActive) {
+        setVoiceStatus("Listening… speak naturally.");
+        startListening();
+      } else {
+        setVoiceStatus("Tap Start talking when you are ready.");
+      }
+      updateVoiceButton();
+    };
+    utterance.onerror = () => {
+      assistantIsSpeaking = false;
+      if (voiceConversationActive) startListening();
+      updateVoiceButton();
+    };
+    speechSynthesis.speak(utterance);
   }
 
   async function extractAttachment(file) {
@@ -2024,8 +2108,6 @@
 
       closeSidebar();
 
-      messageInput.focus();
-
 
     } catch (error) {
 
@@ -2222,8 +2304,6 @@
 
     isSending = true;
 
-    sendButton.disabled = true;
-
 
     const welcome =
       chatElement.querySelector(".welcome");
@@ -2246,9 +2326,6 @@
 
     messageInput.value = "";
 
-    autoResizeInput();
-
-
     conversationHistory.push({
       role: "user",
       content: message
@@ -2265,6 +2342,8 @@
 
     scrollChat();
 
+
+    let replyToSpeak = "";
 
     try {
 
@@ -2288,7 +2367,6 @@
                     -1
                   ),
                 conversationId,
-                webSearch: webSearchEnabled,
                 attachments: pendingAttachments,
                 preferences: profile.preferences || {}
               })
@@ -2323,10 +2401,6 @@
         "I couldn't generate a response.";
 
       pendingAttachments = [];
-      webSearchEnabled = false;
-      webButton.classList.remove("active");
-
-
       typing.remove();
 
 
@@ -2347,10 +2421,7 @@
         aiRow.querySelector(".message").appendChild(sources);
       }
 
-      if (profile.preferences?.speakReplies && "speechSynthesis" in window) {
-        speechSynthesis.cancel();
-        speechSynthesis.speak(new SpeechSynthesisUtterance(reply));
-      }
+      replyToSpeak = reply;
 
 
       conversationHistory.push({
@@ -2431,11 +2502,16 @@
 
       isSending = false;
 
-      sendButton.disabled = false;
-
       scrollChat();
 
-      messageInput.focus();
+      if (replyToSpeak) {
+        speakReply(replyToSpeak);
+      } else if (voiceConversationActive) {
+        setVoiceStatus("Listening… speak naturally.");
+        startListening();
+      }
+
+      updateVoiceButton();
     }
   }
 
@@ -2467,7 +2543,6 @@
 
     closeSidebar();
 
-    messageInput.focus();
   }
 
 
@@ -2518,7 +2593,7 @@
 
         memoryList.innerHTML = `
           <div class="no-memories">
-            My AI hasn't permanently remembered anything yet.
+            Tom's AI hasn't permanently remembered anything yet.
           </div>
         `;
 
@@ -2592,7 +2667,7 @@
 
     const confirmed =
       confirm(
-        "Are you sure you want My AI to forget this?"
+        "Are you sure you want Tom's AI to forget this?"
       );
 
 
@@ -2645,55 +2720,6 @@
 
 
   /* ==================================================
-     AUTO RESIZE INPUT
-     ================================================== */
-
-  function autoResizeInput() {
-
-    messageInput.style.height =
-      "auto";
-
-
-    const newHeight =
-      Math.min(
-        messageInput.scrollHeight,
-        160
-      );
-
-
-    messageInput.style.height =
-      newHeight + "px";
-  }
-
-
-  /* ==================================================
-     KEYBOARD
-     ================================================== */
-
-  messageInput.addEventListener(
-    "keydown",
-    event => {
-
-      if (
-        event.key === "Enter" &&
-        !event.shiftKey
-      ) {
-
-        event.preventDefault();
-
-        sendMessage();
-      }
-    }
-  );
-
-
-  messageInput.addEventListener(
-    "input",
-    autoResizeInput
-  );
-
-
-  /* ==================================================
      ESCAPE
      ================================================== */
 
@@ -2720,9 +2746,7 @@
 
   loadConversations();
 
-  messageInput.focus();
-
-  autoResizeInput();
+  updateVoiceButton();
 </script>
 
 </body>
