@@ -6,7 +6,6 @@
   name="viewport"
   content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
 >
-  >
 
   <meta
     name="theme-color"
@@ -1294,6 +1293,130 @@
         max-width: 95%;
       }
     }
+
+    /* ChatGPT-inspired mobile shell */
+    :root {
+      --bg: #000000;
+      --panel: #000000;
+      --panel-2: #171717;
+      --panel-3: #212121;
+      --text: #f7f7f8;
+      --muted: #b4b4b4;
+      --muted-2: #777777;
+      --accent: #0a84ff;
+      --user-message: #07569a;
+      --ai-message: transparent;
+      --border: rgba(255, 255, 255, 0.12);
+      --border-strong: rgba(255, 255, 255, 0.18);
+    }
+
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+    header {
+      height: calc(78px + env(safe-area-inset-top));
+      padding: env(safe-area-inset-top) 24px 0;
+      border: 0;
+      background: #000;
+    }
+    header .brand { display: none; }
+
+    .top-icon, .top-action {
+      display: grid; place-items: center; width: 56px; height: 56px; padding: 0;
+      border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 50%;
+      background: #151515; color: #f7f7f8; cursor: pointer;
+    }
+    .top-icon svg, .top-action svg, .drawer-icon svg, .composer-icon svg { width: 26px; height: 26px; }
+    .top-actions { display: flex; align-items: center; overflow: hidden; border: 1px solid rgba(255,255,255,.1); border-radius: 30px; background: #151515; }
+    .top-action { width: 56px; border: 0; border-radius: 0; background: transparent; font-size: 27px; letter-spacing: 2px; }
+
+    .quick-menu { display: none; position: fixed; top: calc(72px + env(safe-area-inset-top)); right: 20px; z-index: 150; width: 190px; padding: 7px; border: 1px solid var(--border); border-radius: 16px; background: #202020; box-shadow: 0 16px 40px rgba(0,0,0,.5); }
+    .quick-menu.open { display: grid; }
+    .quick-menu button { padding: 12px; border-radius: 10px; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+    .quick-menu button:hover { background: rgba(255,255,255,.08); }
+
+    #sidebar { top: 0; bottom: 0; width: min(450px, 78vw); padding: calc(48px + env(safe-area-inset-top)) 16px calc(22px + env(safe-area-inset-bottom)); border: 0; background: #000; box-shadow: none; display: flex; flex-direction: column; }
+    #sidebarOverlay { inset: 0; background: rgba(0,0,0,.38); backdrop-filter: none; }
+    .sidebar-top { margin: 0 20px 28px; min-height: 50px; }
+    .sidebar-title { color: var(--text); font-size: 30px; font-weight: 700; letter-spacing: -.03em; text-transform: none; }
+    .sidebar-close { width: 48px; height: 48px; border: 1px solid var(--border); border-radius: 50%; background: #151515; color: var(--text); font-size: 20px; }
+    .sidebar-search-box { display: none; width: calc(100% - 40px); min-height: 48px; margin: -15px 20px 20px; padding: 0 15px; border: 1px solid var(--border-strong); border-radius: 14px; outline: 0; background: #181818; color: var(--text); font-size: 16px; }
+    .sidebar-search-box.open { display: block; }
+    .drawer-nav { display: grid; gap: 3px; margin-bottom: 24px; }
+    .drawer-link { display: flex; align-items: center; gap: 17px; min-height: 60px; padding: 0 20px; border-radius: 13px; background: transparent; color: var(--text); font-size: 22px; font-weight: 650; text-align: left; cursor: pointer; }
+    .drawer-link:hover { background: #202020; }
+    .drawer-icon { display: grid; place-items: center; width: 30px; font-size: 28px; }
+    .sidebar-section-title { margin: 15px 20px 12px; color: var(--text); font-size: 21px; font-weight: 750; }
+    #conversationList { gap: 2px; padding-bottom: 92px; }
+    .chat-item { min-height: 54px; padding: 4px 8px 4px 13px; border: 0; border-radius: 13px; background: transparent; }
+    .chat-item:hover, .chat-item.active { border: 0; background: #202020; }
+    .chat-title { font-size: 18px; font-weight: 520; }
+    .chat-action { color: #aaa; }
+    .sidebar-dock { position: sticky; bottom: 0; margin-top: auto; display: flex; align-items: center; justify-content: space-between; padding: 12px 18px 0; background: linear-gradient(0deg, #000 78%, transparent); }
+    .sidebar-new-chat { display: inline-flex; align-items: center; gap: 10px; height: 54px; padding: 0 20px; border-radius: 18px; background: #0a84ff; color: white; font-size: 18px; font-weight: 750; cursor: pointer; }
+    .sidebar-settings { width: 54px; height: 54px; border: 1px solid var(--border); border-radius: 50%; background: #151515; color: white; font-size: 25px; cursor: pointer; }
+
+    .chat-topbar { display: none; }
+    #chat { padding: 64px max(24px, calc((100vw - 820px) / 2)) 150px; }
+    .welcome { max-width: 660px; margin: 28vh auto 0; text-align: left; }
+    .welcome-icon { display: none; }
+    .welcome h1 { font-size: clamp(28px, 5vw, 38px); }
+    .welcome p { margin: 12px 0 0; }
+
+    .message-row { margin-bottom: 36px; }
+    .message { max-width: min(760px, 88%); padding: 0; border: 0; border-radius: 0; font-size: 18px; line-height: 1.48; }
+    .message.user { padding: 13px 17px; border-radius: 23px; background: #07569a; }
+    .message.ai { padding: 0; background: transparent; border: 0; }
+    .message-actions { display: flex; align-items: center; gap: 5px; margin-top: 12px; color: #b8b8b8; }
+    .message-action { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 8px; background: transparent; color: inherit; font-size: 18px; cursor: pointer; }
+    .message-action:hover { background: rgba(255,255,255,.08); color: white; }
+
+    .input-area { position: absolute; left: 0; right: 0; bottom: 0; z-index: 25; padding: 22px max(18px, calc((100vw - 820px) / 2)) calc(18px + env(safe-area-inset-bottom)); background: linear-gradient(180deg, transparent, #000 28%); }
+    .input-shell { min-height: 0; max-width: 820px; }
+    .voice-control { width: 100%; display: block; }
+    .voice-label, .input-hint { display: none; }
+    .voice-typing-bar { width: 100%; min-height: 60px; align-items: flex-end; gap: 4px; padding: 7px; border: 1px solid #3b3b3b; border-radius: 31px; background: #181818; box-shadow: none; }
+    #message { min-height: 44px; padding: 11px 7px; font-size: 17px; line-height: 1.3; }
+    #message::placeholder { color: #8e8e8e; }
+    .composer-icon { width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; border-radius: 50%; background: transparent; color: #f7f7f8; cursor: pointer; font-size: 32px; line-height: 1; }
+    .composer-icon:hover { background: rgba(255,255,255,.08); }
+    .voice-orb, #sendButton { position: static; width: 46px; height: 46px; flex: 0 0 46px; border: 0; border-radius: 50%; background: #0a84ff; box-shadow: none; }
+    .voice-orb::before, .voice-orb::after { display: none; }
+    .voice-orb:hover { transform: none; box-shadow: none; filter: brightness(1.08); }
+    .voice-waves { height: 22px; gap: 3px; }
+    .voice-waves span { width: 3px; height: 9px; box-shadow: none; }
+    .voice-waves span:nth-child(2) { height: 17px; }
+    .voice-waves span:nth-child(3) { height: 22px; }
+    .voice-waves span:nth-child(4) { height: 17px; }
+    #sendButton { display: none; color: white; font-size: 24px; }
+    #sendButton.ready { display: grid; }
+    #voiceButton.hidden { display: none; }
+    .attachment-actions { display: none; top: auto; right: auto; left: 0; bottom: 70px; width: 210px; padding: 8px; border: 1px solid var(--border); border-radius: 16px; background: #202020; box-shadow: 0 15px 40px rgba(0,0,0,.45); }
+    .attachment-actions.open { display: grid; }
+    .attachment-action { min-height: 43px; padding: 0 12px; border: 0; background: transparent; text-align: left; font-size: 14px; }
+    .attachment-action:hover { background: rgba(255,255,255,.08); }
+
+    @media (max-width: 700px) {
+      header { height: calc(76px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 24px 0; }
+      #sidebar { top: 0; width: 76vw; min-width: 300px; }
+      #sidebarOverlay { inset: 0; }
+      .top-icon { width: 54px; height: 54px; }
+      .top-actions { height: 54px; }
+      .top-action { width: 54px; height: 52px; }
+      #chat { padding: 38px 24px 130px; }
+      .welcome { margin-top: 23vh; }
+      .welcome h1 { font-size: 27px; }
+      .welcome p { font-size: 15px; }
+      .message { max-width: 94%; font-size: 17px; }
+      .input-area { padding: 20px 18px calc(12px + env(safe-area-inset-bottom)); }
+      #memoryPanel, .memory-panel { top: calc(72px + env(safe-area-inset-top)); right: 10px; width: calc(100vw - 20px); }
+    }
+
+    @media (max-width: 390px) {
+      #sidebar { min-width: 286px; }
+      .drawer-link { font-size: 19px; min-height: 54px; }
+      .sidebar-title { font-size: 27px; }
+      .composer-mic { display: none; }
+    }
   </style>
 </head>
 
@@ -1306,69 +1429,21 @@
        ================================================== -->
 
   <header>
-
-    <div class="brand">
-
-      <div class="brand-mark">
-        ✦
-      </div>
-
-      <div class="brand-text">
-
-        <div class="brand-title">
-          Tom's AI
-        </div>
-
-        <div class="brand-subtitle">
-          Your personal assistant
-        </div>
-
-      </div>
-
+    <button class="top-icon" onclick="toggleSidebar()" title="Open menu" aria-label="Open menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 8h14M5 16h10"/></svg>
+    </button>
+    <div class="brand"><span class="sr-only">Tom's AI</span></div>
+    <div class="top-actions">
+      <button class="top-action" onclick="newChat()" title="New chat" aria-label="New chat">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h7"/><path d="m15.5 4.5 4 4L11 17l-4 1 1-4z"/></svg>
+      </button>
+      <button class="top-action" onclick="toggleQuickMenu()" title="More" aria-label="More options">•••</button>
     </div>
-
-
-    <div class="header-buttons">
-
-      <button
-        class="header-button"
-        onclick="toggleSidebar()"
-        title="Chats"
-      >
-        <span>☰</span>
-        <span class="label">Chats</span>
-      </button>
-
-
-      <button
-        class="header-button"
-        onclick="toggleMemoryPanel()"
-        title="Memory"
-      >
-        <span>🧠</span>
-        <span class="label">Memory</span>
-      </button>
-
-      <button class="header-button" onclick="toggleSettingsPanel()" title="Settings">
-        <span>⚙</span><span class="label">Settings</span>
-      </button>
-
-      <button class="header-button" onclick="loadAdminUsage()" title="Usage dashboard">
-        <span>◫</span><span class="label">Usage</span>
-      </button>
-
-
-      <button
-        class="header-button primary"
-        onclick="newChat()"
-        title="New chat"
-      >
-        <span>＋</span>
-        <span class="label">New Chat</span>
-      </button>
-
+    <div id="quickMenu" class="quick-menu">
+      <button onclick="toggleMemoryPanel()">Memory</button>
+      <button onclick="toggleSettingsPanel()">Settings</button>
+      <button onclick="loadAdminUsage()">Usage</button>
     </div>
-
   </header>
 
 
@@ -1384,26 +1459,30 @@
     <aside id="sidebar">
 
       <div class="sidebar-top">
-
-        <div class="sidebar-title">
-          Recent Chats
-        </div>
-
-        <button
-          class="sidebar-close"
-          onclick="closeSidebar()"
-          title="Close"
-        >
-          ✕
+        <div class="sidebar-title">Tom's AI</div>
+        <button class="sidebar-close" onclick="toggleChatSearch()" title="Search chats" aria-label="Search chats">
+          <svg viewBox="0 0 24 24" width="25" height="25" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg>
         </button>
-
       </div>
+      <input id="chatSearch" class="sidebar-search-box" type="search" placeholder="Search chats" autocomplete="off">
 
+      <nav class="drawer-nav" aria-label="Tom's AI features">
+        <button class="drawer-link" onclick="toggleMemoryPanel()"><span class="drawer-icon">▥</span><span>Library</span></button>
+        <button class="drawer-link" onclick="showToast('Projects will appear here when you create one.')"><span class="drawer-icon">▱</span><span>Projects</span></button>
+        <button class="drawer-link" onclick="showToast('Scheduled tasks are not set up yet.')"><span class="drawer-icon">◴</span><span>Scheduled</span></button>
+        <button class="drawer-link" onclick="document.getElementById('photoLibraryInput').click()"><span class="drawer-icon">◉</span><span>Images</span></button>
+      </nav>
 
+      <div class="sidebar-section-title">Recents</div>
       <div id="conversationList">
         <div class="loading-text">
           Loading...
         </div>
+      </div>
+
+      <div class="sidebar-dock">
+        <button class="sidebar-new-chat" onclick="newChat()"><span>✎</span><span>Chat</span></button>
+        <button class="sidebar-settings" onclick="toggleSettingsPanel()" title="Settings" aria-label="Settings">⚙</button>
       </div>
 
     </aside>
@@ -1462,25 +1541,23 @@
           <input id="photoLibraryInput" type="file" multiple accept="image/*" hidden>
           <input id="cameraInput" type="file" accept="image/*" capture="environment" hidden>
 
-          <div class="attachment-actions" aria-label="Add an attachment">
+          <div id="attachmentMenu" class="attachment-actions" aria-label="Add an attachment">
             <button class="attachment-action" onclick="document.getElementById('photoLibraryInput').click()">Photo library</button>
             <button class="attachment-action" onclick="document.getElementById('cameraInput').click()">Take photo</button>
             <button class="attachment-action" onclick="document.getElementById('fileInput').click()">Choose files</button>
           </div>
 
           <div class="voice-control">
-            <button
-              id="voiceButton"
-              class="voice-orb"
-              onclick="toggleVoiceConversation()"
-              title="Start a voice conversation"
-              aria-label="Start a voice conversation"
-            >
-              <span class="voice-waves" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></span>
-            </button>
             <span id="voiceButtonLabel" class="voice-label">Start talking</span>
             <div class="voice-typing-bar">
-              <textarea id="message" rows="1" placeholder="Type a message…" autocomplete="off" spellcheck="true"></textarea>
+              <button class="composer-icon" onclick="toggleAttachmentMenu()" title="Add attachment" aria-label="Add attachment">＋</button>
+              <textarea id="message" rows="1" placeholder="Ask Tom's AI" autocomplete="off" spellcheck="true"></textarea>
+              <button class="composer-icon composer-mic" onclick="toggleVoiceConversation()" title="Dictate" aria-label="Dictate">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+              </button>
+              <button id="voiceButton" class="voice-orb" onclick="toggleVoiceConversation()" title="Start a voice conversation" aria-label="Start a voice conversation">
+                <span class="voice-waves" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></span>
+              </button>
               <button id="sendButton" class="send-button" onclick="sendMessage()" title="Send message" aria-label="Send message">↑</button>
             </div>
           </div>
@@ -1504,11 +1581,11 @@
       <label>Display name <input id="displayName" maxlength="80" placeholder="How should Tom's AI address you?"></label>
       <label>Response style <select id="responseStyle"><option value="balanced">Balanced</option><option value="concise">Concise</option><option value="detailed">Detailed</option></select></label>
       <h3 class="settings-section-title">Voice</h3>
-      <p class="voice-settings-note">Choose the voice Tom's AI uses when it speaks from your phone.</p>
-      <label>Voice <select id="voiceSelect"><option value="">Loading voices…</option></select></label>
-      <label>Speaking speed <select id="voiceRate"><option value="0.85">Slower</option><option value="1" selected>Normal</option><option value="1.15">Faster</option></select></label>
+      <p class="voice-settings-note">Tom's AI speaks with Luna, a natural English voice.</p>
+      <label>Voice <select id="voiceSelect" disabled><option value="luna">Luna — natural English voice</option></select></label>
       <label class="setting-check"><input id="voiceReplies" type="checkbox" checked> Read replies aloud</label>
       <button type="button" class="header-button voice-test-button" onclick="testVoice()">Test voice</button>
+      <p class="voice-settings-note">Luna is generated with Tom's AI's Cloudflare AI service. The text of a reply is sent there only to create audio.</p>
       <button class="header-button primary" onclick="saveProfile()">Save settings</button>
     </div>
   </div>
@@ -1579,12 +1656,14 @@
   let toastTimer = null;
   let pendingAttachments = [];
   let profile = { preferences: {} };
-  let recognition = null;
+  let voiceRecorder = null;
+  let voiceStream = null;
+  let voiceRecordingTimer = null;
   let voiceConversationActive = false;
   let assistantIsSpeaking = false;
-  let availableVoices = [];
-  let voiceOutputPrimed = false;
-  let listeningRestartTimer = null;
+  let voicePlayer = null;
+  let voiceAudio = null;
+  let voiceAudioUrl = null;
   let speechStartTimer = null;
   let speechRequestId = 0;
 
@@ -1628,8 +1707,41 @@
   const voiceStatus = document.getElementById("voiceStatus");
   const settingsPanel = document.getElementById("settingsPanel");
   const adminPanel = document.getElementById("adminPanel");
+  const attachmentMenu = document.getElementById("attachmentMenu");
+  const quickMenu = document.getElementById("quickMenu");
+  const chatSearch = document.getElementById("chatSearch");
+
+  function toggleQuickMenu() {
+    quickMenu.classList.toggle("open");
+    attachmentMenu.classList.remove("open");
+  }
+
+  function toggleAttachmentMenu() {
+    attachmentMenu.classList.toggle("open");
+    quickMenu.classList.remove("open");
+  }
+
+  function toggleChatSearch() {
+    chatSearch.classList.toggle("open");
+    if (chatSearch.classList.contains("open")) chatSearch.focus();
+  }
+
+  chatSearch.addEventListener("input", () => {
+    const query = chatSearch.value.trim().toLowerCase();
+    conversationList.querySelectorAll(".chat-item").forEach(item => {
+      item.style.display = item.textContent.toLowerCase().includes(query) ? "flex" : "none";
+    });
+  });
+
+  function syncComposerControls() {
+    const hasText = Boolean(messageInput.value.trim());
+    sendButton.classList.toggle("ready", hasText);
+    voiceButton.classList.toggle("hidden", hasText);
+  }
 
   function closePanelsExcept(except = null) {
+    quickMenu.classList.remove("open");
+    attachmentMenu.classList.remove("open");
     [memoryPanel, settingsPanel, adminPanel].forEach(panel => {
       if (panel !== except) panel.style.display = "none";
     });
@@ -1656,16 +1768,14 @@
     profile = data.profile;
     document.getElementById("displayName").value = profile.display_name || "";
     document.getElementById("responseStyle").value = profile.preferences?.responseStyle || "balanced";
-    document.getElementById("voiceRate").value = String(profile.preferences?.voiceRate || 1);
     document.getElementById("voiceReplies").checked = profile.preferences?.voiceReplies !== false;
-    populateVoiceOptions();
+    configureLunaVoice();
   }
 
   async function saveProfile() {
     const preferences = {
       responseStyle: document.getElementById("responseStyle").value,
-      voiceName: document.getElementById("voiceSelect").value || "",
-      voiceRate: Number(document.getElementById("voiceRate").value) || 1,
+      voiceName: "luna",
       voiceReplies: document.getElementById("voiceReplies").checked
     };
     const response = await fetch("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ displayName: document.getElementById("displayName").value, preferences }) });
@@ -1692,66 +1802,66 @@
     voiceStatus.textContent = text;
   }
 
-  function populateVoiceOptions() {
+  function configureLunaVoice() {
     const select = document.getElementById("voiceSelect");
-    if (!("speechSynthesis" in window)) {
-      select.innerHTML = '<option value="">Voice output is not supported</option>';
-      select.disabled = true;
-      return;
+    select.replaceChildren(new Option("Luna — natural English voice", "luna"));
+    select.value = "luna";
+    select.disabled = true;
+  }
+
+function getVoicePlayer() {
+  if (!voicePlayer) {
+    voicePlayer = new Audio();
+    voicePlayer.preload = "auto";
+    voicePlayer.playsInline = true;
+  }
+  return voicePlayer;
+}
+
+function primeVoiceOutput() {
+  // iPhone can revoke a web page's audio gesture after a conversation ends.
+  // Re-prime the same player for every button press so normal replies can
+  // use the same allowed audio route as the Test voice button.
+  const primer = getVoicePlayer();
+  primer.src = "data:audio/wav;base64,UklGRiUAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQEAAACA";
+  primer.muted = true;
+  const started = primer.play();
+  if (started) {
+    started
+      .then(() => {
+        primer.pause();
+        primer.currentTime = 0;
+        primer.muted = false;
+      })
+      .catch(() => {
+        primer.muted = false;
+      });
+  }
+}
+
+  function clearVoiceAudio() {
+    if (voiceAudio) {
+      voiceAudio.onplay = null;
+      voiceAudio.onended = null;
+    voiceAudio.onerror = null;
+    voiceAudio.pause();
+    voiceAudio.removeAttribute("src");
+    voiceAudio.load();
+    voiceAudio = null;
+  }
+
+    if (voiceAudioUrl) {
+      URL.revokeObjectURL(voiceAudioUrl);
+      voiceAudioUrl = null;
     }
-
-    availableVoices = speechSynthesis.getVoices();
-    if (!availableVoices.length) {
-      select.innerHTML = '<option value="">Loading voices…</option>';
-      select.disabled = true;
-      return;
-    }
-
-    const savedVoice = profile.preferences?.voiceName || select.value || "";
-    select.replaceChildren();
-    select.add(new Option("Default phone voice", ""));
-    availableVoices.forEach(voice => {
-      select.add(new Option(`${voice.name} (${voice.lang})`, voice.name));
-    });
-    select.value = availableVoices.some(voice => voice.name === savedVoice) ? savedVoice : "";
-    select.disabled = false;
-  }
-
-  function selectedVoice() {
-    const selectedName = document.getElementById("voiceSelect").value || profile.preferences?.voiceName || "";
-    return availableVoices.find(voice => voice.name === selectedName) || null;
-  }
-
-  function createVoiceUtterance(text) {
-    const utterance = new SpeechSynthesisUtterance(text);
-    const voice = selectedVoice();
-    if (voice) utterance.voice = voice;
-    utterance.lang = voice?.lang || navigator.language || "en-GB";
-    utterance.rate = Number(document.getElementById("voiceRate").value || profile.preferences?.voiceRate || 1);
-    return utterance;
-  }
-
-  function primeVoiceOutput() {
-    if (!("speechSynthesis" in window) || voiceOutputPrimed) return;
-
-    voiceOutputPrimed = true;
-    const primer = createVoiceUtterance(" ");
-    primer.volume = 0;
-    speechSynthesis.speak(primer);
-  }
-
-  function scheduleListening(delay = 350) {
-    clearTimeout(listeningRestartTimer);
-    if (!voiceConversationActive) return;
-    listeningRestartTimer = setTimeout(() => startListening(), delay);
   }
 
   function resumeVoiceListening() {
     clearTimeout(speechStartTimer);
     assistantIsSpeaking = false;
     if (voiceConversationActive) {
-      setVoiceStatus("Listening… speak naturally.");
-      scheduleListening();
+      voiceConversationActive = false;
+      setVoiceStatus("Reply finished. Tap Start talking when you are ready.");
     } else {
       setVoiceStatus("Tap Start talking when you are ready.");
     }
@@ -1759,175 +1869,269 @@
   }
 
   function testVoice() {
-    if (!("speechSynthesis" in window)) {
-      return showToast("Voice output is not supported in this browser.");
-    }
-
-    populateVoiceOptions();
-    const requestId = ++speechRequestId;
-    speechSynthesis.cancel();
-    voiceOutputPrimed = true;
-    assistantIsSpeaking = true;
-    const utterance = createVoiceUtterance("Hello, I am Tom's AI. This is the voice I will use on your phone.");
-    utterance.onstart = () => {
-      if (requestId !== speechRequestId) return;
-      setVoiceStatus("Testing Tom's AI voice…");
-      updateVoiceButton();
-    };
-    utterance.onend = () => {
-      if (requestId === speechRequestId) resumeVoiceListening();
-    };
-    utterance.onerror = () => {
-      if (requestId !== speechRequestId) return;
-      showToast("Your phone did not start the voice. Check media volume and try another voice.");
-      resumeVoiceListening();
-    };
-    speechSynthesis.speak(utterance);
+    primeVoiceOutput();
+    playLuna("Hello, I am Tom's AI. This is Luna, the voice I will use on your phone.", true);
   }
 
-  if ("speechSynthesis" in window) {
-    populateVoiceOptions();
-    speechSynthesis.addEventListener("voiceschanged", populateVoiceOptions);
-  }
+  configureLunaVoice();
 
   function updateVoiceButton() {
-    const active = voiceConversationActive || recognition || assistantIsSpeaking;
+    const recording = voiceRecorder?.state === "recording";
+    const active = recording || voiceConversationActive || assistantIsSpeaking || isSending;
     voiceButton.classList.toggle("active", Boolean(active));
-    voiceButtonLabel.textContent = voiceConversationActive ? "End voice conversation" : "Start talking";
-    voiceButton.title = voiceConversationActive ? "End voice conversation" : "Start a voice conversation";
+    voiceButtonLabel.textContent = recording
+      ? "Stop & send"
+      : voiceConversationActive
+        ? "Sending voice…"
+        : "Start talking";
+    voiceButton.title = recording
+      ? "Stop and send voice message"
+      : voiceConversationActive
+        ? "Sending voice message"
+        : "Start a voice conversation";
     voiceButton.setAttribute("aria-label", voiceButton.title);
   }
 
-  function toggleVoiceConversation() {
-    if (voiceConversationActive) {
-      stopVoiceConversation();
+  function getVoiceRecordingMimeType() {
+    if (!window.MediaRecorder?.isTypeSupported) return "";
+    return [
+      "audio/mp4",
+      "audio/webm;codecs=opus",
+      "audio/webm"
+    ].find(type => MediaRecorder.isTypeSupported(type)) || "";
+  }
+
+  function releaseVoiceStream(stream = voiceStream) {
+    if (stream) stream.getTracks().forEach(track => track.stop());
+    if (stream === voiceStream) voiceStream = null;
+  }
+
+  async function toggleVoiceConversation() {
+    if (voiceRecorder?.state === "recording") {
+      stopVoiceRecording();
       return;
     }
 
-    voiceConversationActive = true;
-    primeVoiceOutput();
-    setVoiceStatus("Listening… speak naturally.");
-    updateVoiceButton();
-    startListening();
-  }
-
-  function stopVoiceConversation() {
-    voiceConversationActive = false;
-    speechRequestId += 1;
-    clearTimeout(listeningRestartTimer);
-    clearTimeout(speechStartTimer);
-    if (recognition) recognition.stop();
-    if ("speechSynthesis" in window) speechSynthesis.cancel();
-    assistantIsSpeaking = false;
-    setVoiceStatus("Voice conversation ended. Tap Start talking when you are ready.");
-    updateVoiceButton();
-  }
-
-  function startListening() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      voiceConversationActive = false;
-      updateVoiceButton();
-      return showToast("Voice conversation is not supported in this browser. Try Chrome or Safari on your phone.");
+    if (voiceConversationActive || isSending || assistantIsSpeaking) {
+      showToast(assistantIsSpeaking
+        ? "Please wait for Luna to finish speaking."
+        : "Your voice message is being sent.");
+      return;
     }
-    if (recognition || isSending || assistantIsSpeaking || !voiceConversationActive) return;
 
-    clearTimeout(listeningRestartTimer);
-    let heardSpeech = false;
-    let finalTranscript = "";
-    recognition = new SpeechRecognition();
-    recognition.lang = navigator.language || "en-GB";
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-    recognition.onstart = () => {
-      setVoiceStatus("Listening… speak naturally.");
-      updateVoiceButton();
-    };
-    recognition.onend = () => {
-      recognition = null;
-      if (voiceConversationActive && !heardSpeech && !isSending && !assistantIsSpeaking) {
-        setVoiceStatus("I didn't catch that. Tap End voice conversation to stop, or speak again.");
-        scheduleListening(450);
-      }
-      updateVoiceButton();
-    };
-    recognition.onerror = event => {
-      if (event.error !== "aborted" && event.error !== "no-speech") {
-        voiceConversationActive = false;
-        showToast("Microphone couldn't start. Check your browser microphone permission.");
-      }
-    };
-    recognition.onresult = event => {
-      let interimTranscript = "";
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        const transcript = event.results[index]?.[0]?.transcript || "";
-        if (event.results[index].isFinal) {
-          finalTranscript += ` ${transcript}`;
-        } else {
-          interimTranscript += ` ${transcript}`;
+    primeVoiceOutput();
+    await startVoiceRecording();
+  }
+
+  async function startVoiceRecording() {
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      showToast("Voice input is not supported in this browser. Try Safari on your phone.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
         }
-      }
+      });
+      voiceStream = stream;
+      const mimeType = getVoiceRecordingMimeType();
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+      const chunks = [];
+      let recorderFailed = false;
 
-      const visibleTranscript = (finalTranscript || interimTranscript).trim();
-      if (!visibleTranscript) return;
-      messageInput.value = visibleTranscript;
-      autoResizeMessageInput();
+      voiceRecorder = recorder;
+      voiceConversationActive = true;
 
-      if (!finalTranscript.trim()) {
-        setVoiceStatus("Listening…");
+      recorder.ondataavailable = event => {
+        if (event.data.size > 0) chunks.push(event.data);
+      };
+
+      recorder.onerror = () => {
+        recorderFailed = true;
+        if (voiceRecorder === recorder) voiceRecorder = null;
+        releaseVoiceStream(stream);
+        voiceConversationActive = false;
+        setVoiceStatus("Voice recording stopped. Tap Start talking to try again.");
+        updateVoiceButton();
+        showToast("Voice recording stopped unexpectedly. Please try again.");
+      };
+
+      recorder.onstop = async () => {
+        clearTimeout(voiceRecordingTimer);
+        if (voiceRecorder === recorder) voiceRecorder = null;
+        releaseVoiceStream(stream);
+        if (recorderFailed) return;
+
+        const clip = new Blob(chunks, {
+          type: recorder.mimeType || mimeType || "audio/webm"
+        });
+
+        if (!clip.size) {
+          voiceConversationActive = false;
+          setVoiceStatus("No voice was recorded. Tap Start talking to try again.");
+          updateVoiceButton();
+          return;
+        }
+
+        await sendVoiceRecording(clip);
+      };
+
+      recorder.start();
+      setVoiceStatus("Listening — tap Stop & send when you finish.");
+      updateVoiceButton();
+
+      voiceRecordingTimer = setTimeout(() => {
+        if (voiceRecorder === recorder && recorder.state === "recording") {
+          showToast("Voice messages are limited to one minute.");
+          stopVoiceRecording(true);
+        }
+      }, 60000);
+    } catch (error) {
+      voiceRecorder = null;
+      releaseVoiceStream();
+      voiceConversationActive = false;
+      const blocked = ["NotAllowedError", "SecurityError"].includes(error?.name);
+      setVoiceStatus(blocked ? "Microphone access is needed to talk." : "Microphone couldn't start.");
+      updateVoiceButton();
+      showToast(blocked
+        ? "Allow Microphone for this site in Safari settings, then tap Start talking again."
+        : "Microphone couldn't start. Try again in a moment.");
+    }
+  }
+
+  function stopVoiceRecording(timedOut = false) {
+    const recorder = voiceRecorder;
+    if (!recorder || recorder.state !== "recording") return;
+    clearTimeout(voiceRecordingTimer);
+    setVoiceStatus(timedOut ? "Recording limit reached — sending…" : "Transcribing…");
+    updateVoiceButton();
+    recorder.stop();
+  }
+
+  async function sendVoiceRecording(clip) {
+    try {
+      setVoiceStatus("Transcribing…");
+      updateVoiceButton();
+
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": clip.type || "audio/webm" },
+        body: clip
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Voice transcription failed.");
+
+      const transcript = String(data.text || "").trim();
+      if (!transcript) {
+        voiceConversationActive = false;
+        setVoiceStatus("I didn't hear anything. Tap Start talking to try again.");
+        updateVoiceButton();
         return;
       }
 
-      heardSpeech = true;
+      messageInput.value = transcript;
+      autoResizeMessageInput();
       setVoiceStatus("Thinking…");
-      recognition.stop();
-      sendMessage();
-    };
-    try {
-      recognition.start();
-    } catch (error) {
-      voiceConversationActive = false;
       updateVoiceButton();
-      showToast("Microphone couldn't start. Try again in a moment.");
+      await sendMessage();
+
+      if (!document.getElementById("voiceReplies").checked) {
+        voiceConversationActive = false;
+        setVoiceStatus("Reply is on screen. Tap Start talking when you are ready.");
+        updateVoiceButton();
+      }
+    } catch (error) {
+      console.error("Voice transcription error:", error);
+      voiceConversationActive = false;
+      setVoiceStatus("Voice message wasn't sent. Tap Start talking to try again.");
+      updateVoiceButton();
+      showToast(error.message || "Voice message couldn't be transcribed. Try again.");
+    }
+  }
+
+  async function playLuna(text, force = false) {
+    if (!force && !document.getElementById("voiceReplies").checked) return;
+
+    clearTimeout(speechStartTimer);
+    clearVoiceAudio();
+    const requestId = ++speechRequestId;
+    let playbackStarted = false;
+    assistantIsSpeaking = true;
+    setVoiceStatus("Luna is preparing a reply…");
+    updateVoiceButton();
+
+    speechStartTimer = setTimeout(() => {
+      if (requestId === speechRequestId && !playbackStarted) {
+        speechRequestId += 1;
+        showToast("Luna is taking too long. Your reply is still on screen.");
+        resumeVoiceListening();
+      }
+    }, 10000);
+
+    try {
+      const response = await fetch("/api/speech", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: String(text || "").slice(0, 500) })
+      });
+
+      if (!response.ok) {
+        let error = "Luna is temporarily unavailable. Your reply is still on screen.";
+        try {
+          error = (await response.json()).error || error;
+        } catch (parseError) {}
+        throw new Error(error);
+      }
+
+      const audioBlob = await response.blob();
+      if (requestId !== speechRequestId) return;
+
+      voiceAudioUrl = URL.createObjectURL(audioBlob);
+    const audio = getVoicePlayer();
+    audio.src = voiceAudioUrl;
+    audio.load();
+    voiceAudio = audio;
+      audio.onplay = () => {
+        if (requestId !== speechRequestId) return;
+        playbackStarted = true;
+        clearTimeout(speechStartTimer);
+        setVoiceStatus("Luna is speaking…");
+        updateVoiceButton();
+      };
+      audio.onended = () => {
+        if (requestId !== speechRequestId) return;
+        clearVoiceAudio();
+        resumeVoiceListening();
+      };
+      audio.onerror = () => {
+        if (requestId !== speechRequestId) return;
+        clearVoiceAudio();
+        showToast("Luna could not play. Check your phone media volume and try Test voice in Settings.");
+        resumeVoiceListening();
+      };
+      await audio.play();
+    } catch (error) {
+      if (requestId !== speechRequestId) return;
+      clearVoiceAudio();
+      clearTimeout(speechStartTimer);
+      showToast(error?.message || "Luna is temporarily unavailable. Your reply is still on screen.");
+      resumeVoiceListening();
     }
   }
 
   function speakReply(reply) {
-    if (!document.getElementById("voiceReplies").checked) return;
-
-    if (!("speechSynthesis" in window)) {
-      setVoiceStatus("Your browser cannot read replies aloud.");
+    if (!document.getElementById("voiceReplies").checked) {
+      resumeVoiceListening();
       return;
     }
 
-    clearTimeout(speechStartTimer);
-    const requestId = ++speechRequestId;
-    speechSynthesis.cancel();
-    assistantIsSpeaking = true;
-    let playbackStarted = false;
-    const utterance = createVoiceUtterance(reply);
-    utterance.onstart = () => {
-      if (requestId !== speechRequestId) return;
-      playbackStarted = true;
-      clearTimeout(speechStartTimer);
-      setVoiceStatus("Tom's AI is speaking…");
-      updateVoiceButton();
-    };
-    utterance.onend = () => {
-      if (requestId === speechRequestId) resumeVoiceListening();
-    };
-    utterance.onerror = () => {
-      if (requestId !== speechRequestId) return;
-      showToast("Voice playback could not start. Use Test voice in Settings to choose another phone voice.");
-      resumeVoiceListening();
-    };
-    speechSynthesis.speak(utterance);
-    speechStartTimer = setTimeout(() => {
-      if (requestId === speechRequestId && !playbackStarted && assistantIsSpeaking) {
-        showToast("Voice playback did not start. Open Settings and use Test voice.");
-        resumeVoiceListening();
-      }
-    }, 2500);
+    playLuna(reply);
   }
 
   async function extractAttachment(file) {
@@ -1970,7 +2174,10 @@
     messageInput.style.height = `${Math.min(messageInput.scrollHeight, 110)}px`;
   }
 
-  messageInput.addEventListener("input", autoResizeMessageInput);
+  messageInput.addEventListener("input", () => {
+    autoResizeMessageInput();
+    syncComposerControls();
+  });
   messageInput.addEventListener("keydown", event => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
@@ -2150,6 +2357,52 @@
     container.appendChild(document.createTextNode(value.slice(cursor)));
   }
 
+  function makeMessageAction(label, symbol, handler) {
+    const button = document.createElement("button");
+    button.className = "message-action";
+    button.type = "button";
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    button.textContent = symbol;
+    button.onclick = handler;
+    return button;
+  }
+
+  async function copyMessage(content) {
+    try {
+      await navigator.clipboard.writeText(content);
+      showToast("Copied");
+    } catch (error) {
+      showToast("Couldn't copy this reply.");
+    }
+  }
+
+  async function shareMessage(content) {
+    try {
+      if (navigator.share) {
+        await navigator.share({ text: content });
+      } else {
+        await copyMessage(content);
+      }
+    } catch (error) {
+      if (error?.name !== "AbortError") showToast("Couldn't share this reply.");
+    }
+  }
+
+  function createMessageActions(content) {
+    const actions = document.createElement("div");
+    actions.className = "message-actions";
+    actions.append(
+      makeMessageAction("Copy", "▢", () => copyMessage(content)),
+      makeMessageAction("Read aloud", "◖))", () => playLuna(content, true)),
+      makeMessageAction("Good response", "♡", event => { event.currentTarget.textContent = "♥"; showToast("Thanks for the feedback"); }),
+      makeMessageAction("Bad response", "♧", () => showToast("Thanks for the feedback")),
+      makeMessageAction("Share", "⇧", () => shareMessage(content)),
+      makeMessageAction("More", "•••", () => showToast("More reply options are coming soon."))
+    );
+    return actions;
+  }
+
   function createMessageElement(
     role,
     content,
@@ -2197,6 +2450,10 @@
         formatTime(timestamp);
 
       message.appendChild(meta);
+    }
+
+    if (role !== "user") {
+      message.appendChild(createMessageActions(content));
     }
 
 
@@ -2735,6 +2992,10 @@
       return;
     }
 
+    if (document.getElementById("voiceReplies").checked) {
+      primeVoiceOutput();
+    }
+
 
     isSending = true;
 
@@ -2763,6 +3024,7 @@
     messageInput.value = "";
 
     autoResizeMessageInput();
+    syncComposerControls();
 
     conversationHistory.push({
       role: "user",
@@ -2867,7 +3129,8 @@
           }
           if (index < data.sources.length - 1) sources.appendChild(document.createTextNode(" · "));
         });
-        aiRow.querySelector(".message").appendChild(sources);
+        const replyMessage = aiRow.querySelector(".message");
+        replyMessage.insertBefore(sources, replyMessage.querySelector(".message-actions"));
       }
 
       replyToSpeak = reply;
@@ -2958,8 +3221,8 @@
       if (replyToSpeak) {
         speakReply(replyToSpeak);
       } else if (voiceConversationActive) {
-        setVoiceStatus("Listening… speak naturally.");
-        startListening();
+        voiceConversationActive = false;
+        setVoiceStatus("Reply finished. Tap Start talking when you are ready.");
       }
 
       updateVoiceButton();
@@ -3195,6 +3458,8 @@
   loadConversations();
 
   autoResizeMessageInput();
+
+  syncComposerControls();
 
   updateVoiceButton();
 </script>

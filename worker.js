@@ -8,6 +8,12 @@ const MODEL =
 
 const MAX_CONTEXT_MESSAGES = 24;
 
+// The single built-in voice used by Tom's AI.
+const VOICE_MODEL = "@cf/deepgram/aura-1";
+const VOICE_SPEAKER = "luna";
+const TRANSCRIPTION_MODEL = "@cf/openai/whisper";
+const MAX_TRANSCRIPTION_AUDIO_BYTES = 5 * 1024 * 1024;
+
 // Cloudflare Access configuration for your Tom's AI application.
 const TEAM_DOMAIN =
   "https://shrill-snowflake-7123.cloudflareaccess.com";
@@ -549,6 +555,79 @@ export default {
         user:
           email || "authenticated user"
       });
+    }
+
+    /* ==================================================
+       LUNA VOICE OUTPUT
+       ================================================== */
+
+    if (url.pathname === "/api/speech" && request.method === "POST") {
+      try {
+        const body = await request.json();
+        const text = cleanText(body?.text, 500);
+
+        if (!text) {
+          return json({ error: "Luna needs some text to speak." }, 400);
+        }
+
+        const audioResponse = await env.AI.run(
+          VOICE_MODEL,
+          { text, speaker: VOICE_SPEAKER },
+          { returnRawResponse: true }
+        );
+
+        if (!audioResponse?.body) {
+          console.error("Luna voice generation returned no audio.");
+          return json({ error: "Luna is temporarily unavailable. Your reply is still on screen." }, 503);
+        }
+
+        return new Response(audioResponse.body, {
+          status: 200,
+          headers: {
+            "Cache-Control": "no-store",
+            "Content-Disposition": 'inline; filename="toms-ai-luna.mp3"',
+            "Content-Type": audioResponse.headers?.get("Content-Type") || "audio/mpeg"
+          }
+        });
+      } catch (error) {
+        console.error("Luna voice output error:", error);
+        return json({ error: "Luna is temporarily unavailable. Your reply is still on screen." }, 503);
+      }
+    }
+
+    /* ==================================================
+       VOICE INPUT
+       ================================================== */
+
+    if (url.pathname === "/api/transcribe" && request.method === "POST") {
+      try {
+        const contentType = request.headers.get("Content-Type") || "";
+        if (!contentType.toLowerCase().startsWith("audio/")) {
+          return json({ error: "Please send a voice recording." }, 400);
+        }
+
+        const contentLength = Number(request.headers.get("Content-Length"));
+        if (Number.isFinite(contentLength) && contentLength > MAX_TRANSCRIPTION_AUDIO_BYTES) {
+          return json({ error: "Voice messages can be up to one minute long." }, 413);
+        }
+
+        const audio = new Uint8Array(await request.arrayBuffer());
+        if (!audio.byteLength) {
+          return json({ error: "No voice recording was received." }, 400);
+        }
+        if (audio.byteLength > MAX_TRANSCRIPTION_AUDIO_BYTES) {
+          return json({ error: "Voice messages can be up to one minute long." }, 413);
+        }
+
+        const result = await env.AI.run(TRANSCRIPTION_MODEL, {
+          audio: [...audio]
+        });
+
+        return json({ text: cleanText(result?.text, 2000) });
+      } catch (error) {
+        console.error("Voice transcription failed:", error);
+        return json({ error: "Tom's AI could not transcribe that recording. Please try again." }, 502);
+      }
     }
 
     if (url.pathname === "/api/profile" && request.method === "GET") {

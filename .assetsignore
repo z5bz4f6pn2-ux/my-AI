@@ -1,0 +1,12 @@
+# Only index.html is a public static asset for this Worker.
+.git
+.github
+.pnpm-cache
+.wrangler
+migrations
+node_modules
+worker.js
+package.json
+package-lock.json
+wrangler.jsonc
+README.md

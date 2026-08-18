@@ -1,0 +1,7 @@
+node_modules/
+.pnpm-cache/
+.wrangler/
+.dev.vars
+.env
+.env.*
+!.env.example
