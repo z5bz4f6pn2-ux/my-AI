@@ -12,6 +12,15 @@
     "binding": "AI"
   },
 
+  "vars": {
+    "ADMIN_EMAIL": "thomasbateman6@gmail.com"
+  },
+
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+
   "d1_databases": [
     {
       "binding": "DB",
@@ -21,3 +30,4 @@
     }
   ]
 }
+

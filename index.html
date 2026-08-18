@@ -754,6 +754,29 @@
       animation: panelIn 0.16s ease;
     }
 
+    .memory-panel {
+      display: none;
+      position: fixed;
+      top: 76px;
+      right: 18px;
+      width: min(390px, calc(100vw - 36px));
+      max-height: min(72vh, 680px);
+      padding: 18px;
+      overflow-y: auto;
+      border: 1px solid var(--border-strong);
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.015)), var(--panel);
+      box-shadow: var(--shadow);
+      z-index: 120;
+    }
+
+    .settings-form { display: grid; gap: 14px; color: var(--muted); font-size: 13px; }
+    .settings-form label { display: grid; gap: 7px; }
+    .settings-form input, .settings-form select { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,.05); color: var(--text); }
+    .settings-form .setting-check { display: flex; align-items: center; gap: 9px; }
+    .settings-form .setting-check input { padding: 0; }
+    #webButton.active, #voiceButton.active { color: #b9a4ff; border-color: #8f72ff; }
+
     .memory-header {
       display: flex;
       align-items: flex-start;
@@ -1108,6 +1131,14 @@
         <span class="label">Memory</span>
       </button>
 
+      <button class="header-button" onclick="toggleSettingsPanel()" title="Settings">
+        <span>⚙</span><span class="label">Settings</span>
+      </button>
+
+      <button class="header-button" onclick="loadAdminUsage()" title="Usage dashboard">
+        <span>◫</span><span class="label">Usage</span>
+      </button>
+
 
       <button
         class="header-button primary"
@@ -1209,6 +1240,8 @@
 
         <div class="input-shell">
 
+          <input id="fileInput" type="file" multiple accept=".txt,.md,.csv,.json,.pdf,image/*" hidden>
+
           <textarea
             id="message"
             rows="1"
@@ -1217,6 +1250,36 @@
             spellcheck="true"
           ></textarea>
 
+
+          <button
+            id="attachButton"
+            class="send-button"
+            onclick="document.getElementById('fileInput').click()"
+            title="Attach a file"
+            aria-label="Attach a file"
+          >
+            +
+          </button>
+
+          <button
+            id="voiceButton"
+            class="send-button"
+            onclick="toggleVoiceInput()"
+            title="Voice input"
+            aria-label="Voice input"
+          >
+            ◉
+          </button>
+
+          <button
+            id="webButton"
+            class="send-button"
+            onclick="toggleWebSearch()"
+            title="Use web search"
+            aria-label="Use web search"
+          >
+            ◌
+          </button>
 
           <button
             id="sendButton"
@@ -1232,13 +1295,28 @@
 
 
         <div class="input-hint">
-          Press Enter to send · Shift + Enter for a new line
+          Press Enter to send · Shift + Enter for a new line · ◌ web search
         </div>
 
       </div>
 
     </main>
 
+  </div>
+
+  <div id="settingsPanel" class="memory-panel">
+    <div class="memory-header"><div class="memory-heading"><h2>Profile & settings</h2><p>Personalise how My AI responds.</p></div><button class="close-memory" onclick="toggleSettingsPanel()">✕</button></div>
+    <div class="settings-form">
+      <label>Display name <input id="displayName" maxlength="80" placeholder="How should My AI address you?"></label>
+      <label>Response style <select id="responseStyle"><option value="balanced">Balanced</option><option value="concise">Concise</option><option value="detailed">Detailed</option></select></label>
+      <label class="setting-check"><input id="speakReplies" type="checkbox"> Read replies aloud</label>
+      <button class="header-button primary" onclick="saveProfile()">Save settings</button>
+    </div>
+  </div>
+
+  <div id="adminPanel" class="memory-panel">
+    <div class="memory-header"><div class="memory-heading"><h2>Private usage</h2><p>Aggregate usage from the last 30 days.</p></div><button class="close-memory" onclick="closeAdminPanel()">✕</button></div>
+    <div id="adminUsage" class="settings-form">Loading…</div>
   </div>
 
 
@@ -1294,11 +1372,16 @@
 </div>
 
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
   let conversationHistory = [];
   let conversationId = null;
   let isSending = false;
   let toastTimer = null;
+  let webSearchEnabled = false;
+  let pendingAttachments = [];
+  let profile = { preferences: {} };
+  let recognition = null;
 
 
   /* ==================================================
@@ -1333,6 +1416,96 @@
     document.getElementById(
       "currentConversationTitle"
     );
+
+  const fileInput = document.getElementById("fileInput");
+  const webButton = document.getElementById("webButton");
+  const voiceButton = document.getElementById("voiceButton");
+
+  function toggleWebSearch() {
+    webSearchEnabled = !webSearchEnabled;
+    webButton.classList.toggle("active", webSearchEnabled);
+    showToast(webSearchEnabled ? "Web search enabled for this message." : "Web search disabled.");
+  }
+
+  function toggleSettingsPanel() {
+    const panel = document.getElementById("settingsPanel");
+    panel.style.display = panel.style.display === "block" ? "none" : "block";
+    if (panel.style.display === "block") loadProfile();
+  }
+
+  async function loadProfile() {
+    const response = await fetch("/api/profile");
+    const data = await response.json();
+    if (!response.ok) return showToast(data.error || "Unable to load settings.");
+    profile = data.profile;
+    document.getElementById("displayName").value = profile.display_name || "";
+    document.getElementById("responseStyle").value = profile.preferences?.responseStyle || "balanced";
+    document.getElementById("speakReplies").checked = Boolean(profile.preferences?.speakReplies);
+  }
+
+  async function saveProfile() {
+    const preferences = {
+      responseStyle: document.getElementById("responseStyle").value,
+      speakReplies: document.getElementById("speakReplies").checked
+    };
+    const response = await fetch("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ displayName: document.getElementById("displayName").value, preferences }) });
+    const data = await response.json();
+    if (!response.ok) return showToast(data.error || "Unable to save settings.");
+    profile = { display_name: document.getElementById("displayName").value, preferences };
+    showToast("Settings saved.");
+  }
+
+  async function loadAdminUsage() {
+    const panel = document.getElementById("adminPanel");
+    panel.style.display = "block";
+    const output = document.getElementById("adminUsage");
+    output.textContent = "Loading…";
+    const response = await fetch("/api/admin/usage");
+    const data = await response.json();
+    if (!response.ok) { output.textContent = data.error || "This dashboard is private."; return; }
+    output.innerHTML = `<strong>${data.summary.requests}</strong> AI requests · <strong>${data.summary.users}</strong> active users<br><br>${Number(data.summary.input_chars).toLocaleString()} input characters · ${Number(data.summary.output_chars).toLocaleString()} output characters`;
+  }
+
+  function closeAdminPanel() { document.getElementById("adminPanel").style.display = "none"; }
+
+  function toggleVoiceInput() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return showToast("Voice input is not supported in this browser.");
+    if (recognition) { recognition.stop(); return; }
+    recognition = new SpeechRecognition();
+    recognition.lang = navigator.language || "en-GB";
+    recognition.interimResults = false;
+    recognition.onstart = () => voiceButton.classList.add("active");
+    recognition.onend = () => { recognition = null; voiceButton.classList.remove("active"); };
+    recognition.onerror = () => showToast("Voice input couldn't start.");
+    recognition.onresult = event => { messageInput.value += (messageInput.value ? " " : "") + event.results[0][0].transcript; autoResizeInput(); };
+    recognition.start();
+  }
+
+  async function extractAttachment(file) {
+    if (file.size > 5 * 1024 * 1024) throw new Error(`${file.name} is larger than 5 MB.`);
+    if (file.type === "application/pdf") {
+      if (!window.pdfjsLib) throw new Error("PDF reader is still loading. Try again in a moment.");
+      const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+      let text = "";
+      for (let pageNumber = 1; pageNumber <= Math.min(pdf.numPages, 20); pageNumber += 1) {
+        const page = await pdf.getPage(pageNumber);
+        text += (await page.getTextContent()).items.map(item => item.str).join(" ") + "\n";
+      }
+      return { name: file.name, type: file.type, text: text.slice(0, 12000) };
+    }
+    if (file.type.startsWith("image/")) return { name: file.name, type: file.type, text: "Image attached. Describe or ask about its visible content." };
+    return { name: file.name, type: file.type, text: (await file.text()).slice(0, 12000) };
+  }
+
+  fileInput.addEventListener("change", async () => {
+    try {
+      const extracted = await Promise.all([...fileInput.files].slice(0, 3).map(extractAttachment));
+      pendingAttachments.push(...extracted);
+      showToast(`${extracted.length} attachment${extracted.length === 1 ? "" : "s"} ready.`);
+    } catch (error) { showToast(error.message || "Couldn't read that attachment."); }
+    fileInput.value = "";
+  });
 
 
   /* ==================================================
@@ -2114,7 +2287,10 @@
                     0,
                     -1
                   ),
-                conversationId
+                conversationId,
+                webSearch: webSearchEnabled,
+                attachments: pendingAttachments,
+                preferences: profile.preferences || {}
               })
           }
         );
@@ -2146,6 +2322,10 @@
         data.response ||
         "I couldn't generate a response.";
 
+      pendingAttachments = [];
+      webSearchEnabled = false;
+      webButton.classList.remove("active");
+
 
       typing.remove();
 
@@ -2159,6 +2339,18 @@
       chatElement.appendChild(
         aiRow
       );
+
+      if (Array.isArray(data.sources) && data.sources.length) {
+        const sources = document.createElement("div");
+        sources.className = "message-meta";
+        sources.textContent = "Sources: " + data.sources.map(source => `[${source.number}] ${source.title}`).join(" · ");
+        aiRow.querySelector(".message").appendChild(sources);
+      }
+
+      if (profile.preferences?.speakReplies && "speechSynthesis" in window) {
+        speechSynthesis.cancel();
+        speechSynthesis.speak(new SpeechSynthesisUtterance(reply));
+      }
 
 
       conversationHistory.push({
@@ -2535,3 +2727,4 @@
 
 </body>
 </html>
+

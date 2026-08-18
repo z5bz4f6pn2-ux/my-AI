@@ -277,6 +277,90 @@ function extractAIResponse(result) {
   return "";
 }
 
+const EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5";
+
+async function createEmbedding(env, text) {
+  const result = await env.AI.run(EMBEDDING_MODEL, {
+    text: text.slice(0, 3000),
+    pooling: "cls"
+  });
+  const vector = Array.isArray(result?.data) ? result.data[0] : null;
+  return Array.isArray(vector) ? vector : null;
+}
+
+function cosineSimilarity(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+    return 0;
+  }
+  let dot = 0;
+  let leftMagnitude = 0;
+  let rightMagnitude = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    dot += left[index] * right[index];
+    leftMagnitude += left[index] * left[index];
+    rightMagnitude += right[index] * right[index];
+  }
+  return dot / (Math.sqrt(leftMagnitude) * Math.sqrt(rightMagnitude) || 1);
+}
+
+function lexicalSimilarity(query, value) {
+  const terms = new Set((query.toLowerCase().match(/[a-z0-9]{3,}/g) || []));
+  if (!terms.size) return 0;
+  const text = new Set((value.toLowerCase().match(/[a-z0-9]{3,}/g) || []));
+  let matches = 0;
+  for (const term of terms) if (text.has(term)) matches += 1;
+  return matches / terms.size;
+}
+
+async function getRelevantMemories(db, env, userId, query) {
+  const result = await db.prepare(`
+    SELECT id, memory, embedding_json FROM memories
+    WHERE user_id = ? ORDER BY updated_at DESC LIMIT 80
+  `).bind(userId).all();
+  const memories = result.results || [];
+  try {
+    const queryEmbedding = await createEmbedding(env, query);
+    if (queryEmbedding) {
+      return memories
+        .map(memory => ({
+          ...memory,
+          score: memory.embedding_json
+            ? cosineSimilarity(queryEmbedding, JSON.parse(memory.embedding_json))
+            : lexicalSimilarity(query, memory.memory)
+        }))
+        .filter(memory => memory.score > 0.12)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 8);
+    }
+  } catch (error) {
+    console.warn("Semantic memory retrieval unavailable", error);
+  }
+  return memories.slice(0, 8);
+}
+
+async function searchWeb(query) {
+  const endpoint = new URL("https://api.duckduckgo.com/");
+  endpoint.searchParams.set("q", query.slice(0, 300));
+  endpoint.searchParams.set("format", "json");
+  endpoint.searchParams.set("no_html", "1");
+  endpoint.searchParams.set("skip_disambig", "1");
+  const response = await fetch(endpoint, { headers: { Accept: "application/json" } });
+  if (!response.ok) throw new Error("Web search is temporarily unavailable.");
+  const data = await response.json();
+  const results = [];
+  if (data.AbstractText && data.AbstractURL) {
+    results.push({ title: data.Heading || "Result", url: data.AbstractURL, snippet: data.AbstractText });
+  }
+  for (const topic of data.RelatedTopics || []) {
+    if (topic?.Text && topic?.FirstURL) results.push({ title: topic.Text.split(" - ")[0], url: topic.FirstURL, snippet: topic.Text });
+    for (const nested of topic?.Topics || []) {
+      if (nested?.Text && nested?.FirstURL) results.push({ title: nested.Text.split(" - ")[0], url: nested.FirstURL, snippet: nested.Text });
+    }
+    if (results.length >= 5) break;
+  }
+  return results.slice(0, 5);
+}
+
 
 /* ==================================================
    CONVERSATION CONTEXT
@@ -449,6 +533,59 @@ export default {
         user:
           email || "authenticated user"
       });
+    }
+
+    if (url.pathname === "/api/profile" && request.method === "GET") {
+      const profile = await env.DB.prepare(`
+        SELECT display_name, preferences_json, updated_at FROM profiles WHERE user_id = ?
+      `).bind(userId).first();
+      return json({ profile: profile ? {
+        ...profile,
+        preferences: JSON.parse(profile.preferences_json || "{}")
+      } : { display_name: "", preferences: {} } });
+    }
+
+    if (url.pathname === "/api/profile" && request.method === "PATCH") {
+      const body = await request.json();
+      const displayName = cleanText(body?.displayName, 80);
+      const preferences = body?.preferences && typeof body.preferences === "object" ? body.preferences : {};
+      await env.DB.prepare(`
+        INSERT INTO profiles (user_id, display_name, preferences_json, updated_at)
+        VALUES (?, ?, ?, current_timestamp)
+        ON CONFLICT(user_id) DO UPDATE SET
+          display_name = excluded.display_name,
+          preferences_json = excluded.preferences_json,
+          updated_at = current_timestamp
+      `).bind(userId, displayName, JSON.stringify(preferences)).run();
+      return json({ success: true });
+    }
+
+    if (url.pathname === "/api/admin/usage" && request.method === "GET") {
+      if (!env.ADMIN_EMAIL || email !== env.ADMIN_EMAIL.toLowerCase()) {
+        return json({ error: "Administrator access is required." }, 403);
+      }
+      const summary = await env.DB.prepare(`
+        SELECT COUNT(*) AS requests, COUNT(DISTINCT user_id) AS users,
+          COALESCE(SUM(input_chars), 0) AS input_chars,
+          COALESCE(SUM(output_chars), 0) AS output_chars
+        FROM usage_events WHERE created_at >= datetime('now', '-30 days')
+      `).first();
+      const daily = await env.DB.prepare(`
+        SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS requests
+        FROM usage_events WHERE created_at >= datetime('now', '-30 days')
+        GROUP BY day ORDER BY day ASC
+      `).all();
+      return json({ period: "last_30_days", summary, daily: daily.results || [] });
+    }
+
+    if (url.pathname === "/api/web-search" && request.method === "GET") {
+      const query = cleanText(url.searchParams.get("q"), 300);
+      if (!query) return json({ error: "A search query is required." }, 400);
+      try {
+        return json({ results: await searchWeb(query) });
+      } catch (error) {
+        return json({ error: error.message }, 503);
+      }
     }
 
 
@@ -913,6 +1050,18 @@ export default {
           body?.conversationId ||
           null;
 
+        const webSearchRequested = body?.webSearch === true;
+        const attachments = Array.isArray(body?.attachments)
+          ? body.attachments.slice(0, 3).map(file => ({
+              name: cleanText(file?.name, 160),
+              type: cleanText(file?.type, 80),
+              text: cleanText(file?.text, 12000)
+            })).filter(file => file.name || file.text)
+          : [];
+        const responseStyle = ["concise", "balanced", "detailed"].includes(body?.preferences?.responseStyle)
+          ? body.preferences.responseStyle
+          : "balanced";
+
         if (!message) {
 
           return json(
@@ -1003,22 +1152,7 @@ export default {
            GET SAVED MEMORIES
            ---------------------------------------------- */
 
-        const memoryResult =
-          await env.DB
-            .prepare(`
-              SELECT
-                id,
-                memory
-              FROM memories
-              WHERE user_id = ?
-              ORDER BY created_at DESC
-              LIMIT 30
-            `)
-            .bind(userId)
-            .all();
-
-        const memories =
-          memoryResult.results || [];
+        const memories = await getRelevantMemories(env.DB, env, userId, message);
 
         const memoryText =
           memories.length > 0
@@ -1028,7 +1162,18 @@ export default {
                     `- ${row.memory}`
                 )
                 .join("\n")
-            : "No saved memories.";
+            : "No relevant saved memories.";
+
+        let webResults = [];
+        if (webSearchRequested) {
+          try { webResults = await searchWeb(message); } catch (error) { console.warn("Web search failed", error); }
+        }
+        const webText = webResults.length
+          ? webResults.map((result, index) => `[${index + 1}] ${result.title}\n${result.snippet}\nSource: ${result.url}`).join("\n\n")
+          : "No web results were requested or available.";
+        const attachmentText = attachments.length
+          ? attachments.map(file => `File: ${file.name} (${file.type || "unknown type"})\n${file.text || "No extractable text."}`).join("\n\n")
+          : "No attachments.";
 
 
         /* ----------------------------------------------
@@ -1087,6 +1232,8 @@ Be:
 - direct
 - thoughtful
 - honest
+
+Preferred response style: ${responseStyle}. ${responseStyle === "concise" ? "Use the fewest words that fully answer the request." : responseStyle === "detailed" ? "Include useful reasoning and practical detail." : "Match the complexity of the request."}
 
 Understand what the user is actually asking.
 
@@ -1172,6 +1319,14 @@ ${memoryText}
 Only use a memory when genuinely relevant.
 
 Do not invent connections between unrelated memories.
+
+WEB RESULTS (only cite these as [1], [2], etc.; say when results are insufficient):
+
+${webText}
+
+ATTACHMENTS (treat as user-provided source material):
+
+${attachmentText}
 
 The current user message is:
 
@@ -1460,17 +1615,29 @@ NO
 
               if (!duplicate) {
 
-                await env.DB
+                const inserted = await env.DB
                   .prepare(`
                     INSERT INTO memories
-                    (user_id, memory)
-                    VALUES (?, ?)
+                    (user_id, memory, updated_at)
+                    VALUES (?, ?, current_timestamp)
+                    RETURNING id
                   `)
                   .bind(
                     userId,
                     memory
                   )
-                  .run();
+                  .first();
+
+                try {
+                  const embedding = await createEmbedding(env, memory);
+                  if (embedding && inserted?.id) {
+                    await env.DB.prepare(`
+                      UPDATE memories SET embedding_json = ?, updated_at = current_timestamp WHERE id = ? AND user_id = ?
+                    `).bind(JSON.stringify(embedding), inserted.id, userId).run();
+                  }
+                } catch (embeddingError) {
+                  console.warn("Memory embedding error", embeddingError);
+                }
               }
             }
           }
@@ -1483,6 +1650,11 @@ NO
           );
         }
 
+        await env.DB.prepare(`
+          INSERT INTO usage_events (user_id, event_type, input_chars, output_chars)
+          VALUES (?, 'chat', ?, ?)
+        `).bind(userId, message.length, response.length).run();
+
 
         /* ----------------------------------------------
            RETURN RESPONSE
@@ -1491,7 +1663,8 @@ NO
         return json({
           response,
           conversationId:
-            currentConversationId
+            currentConversationId,
+          sources: webResults.map((result, index) => ({ ...result, number: index + 1 }))
         });
 
       } catch (error) {
@@ -1522,3 +1695,4 @@ NO
     );
   }
 };
+
