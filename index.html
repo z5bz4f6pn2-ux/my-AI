@@ -565,6 +565,32 @@
       border-bottom-left-radius: 7px;
     }
 
+    .message-link,
+    .source-link {
+      color: #9fc4ff;
+      text-decoration: underline;
+      text-decoration-color: rgba(159, 196, 255, 0.55);
+      text-underline-offset: 3px;
+    }
+
+    .message-link:hover,
+    .source-link:hover {
+      color: #d7e6ff;
+      text-decoration-color: currentColor;
+    }
+
+    .message.user .message-link {
+      color: #ffffff;
+      text-decoration-color: rgba(255, 255, 255, 0.7);
+    }
+
+    .message-link:focus-visible,
+    .source-link:focus-visible {
+      outline: 2px solid #a98cff;
+      outline-offset: 3px;
+      border-radius: 3px;
+    }
+
     .message-meta {
       margin-top: 6px;
 
@@ -628,22 +654,11 @@
 
       display: flex;
       align-items: center;
-      gap: 9px;
+      justify-content: center;
 
-      padding: 8px;
+      min-height: 112px;
 
-      border: 1px solid var(--border-strong);
-      border-radius: 19px;
-
-      background:
-        linear-gradient(
-          180deg,
-          rgba(255, 255, 255, 0.05),
-          rgba(255, 255, 255, 0.025)
-        ),
-        var(--panel);
-
-      box-shadow: var(--shadow);
+      position: relative;
     }
 
     .send-button {
@@ -680,48 +695,158 @@
       transform: none;
     }
 
-    .voice-button {
-      min-height: 44px;
-      flex: 1;
+    #attachButton {
+      position: absolute;
+      top: 24px;
+      right: max(12px, calc(50% - 138px));
 
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 9px;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+    }
 
-      padding: 10px 16px;
+    #attachButton:hover {
+      background: rgba(255, 255, 255, 0.14);
+    }
 
-      border-radius: 14px;
+    .voice-control {
+      display: grid;
+      justify-items: center;
+      gap: 8px;
+    }
 
-      background: var(--text);
-      color: #111;
+    .voice-orb {
+      width: 76px;
+      height: 76px;
 
-      font: inherit;
-      font-weight: 650;
+      display: grid;
+      place-items: center;
+
+      position: relative;
+      isolation: isolate;
+
+      border: 1px solid rgba(209, 225, 255, 0.42);
+      border-radius: 50%;
+
+      background:
+        radial-gradient(circle at 32% 26%, #edf4ff 0 5%, #a8c8ff 15%, #6798ed 39%, #3f60bb 69%, #263775 100%);
+      color: #ffffff;
+
+      box-shadow:
+        0 0 0 5px rgba(109, 145, 245, 0.08),
+        0 14px 34px rgba(46, 82, 187, 0.42),
+        inset 0 1px 1px rgba(255, 255, 255, 0.75);
 
       cursor: pointer;
 
       transition:
-        transform 0.15s ease,
-        background 0.15s ease;
+        transform 0.2s ease,
+        box-shadow 0.2s ease,
+        filter 0.2s ease;
     }
 
-    .voice-button:hover {
-      background: #ffffff;
+    .voice-orb::before,
+    .voice-orb::after {
+      content: "";
+      position: absolute;
+      inset: -8px;
+      z-index: -1;
+      border: 1px solid rgba(130, 166, 255, 0.25);
+      border-radius: inherit;
+      opacity: 0;
     }
 
-    .voice-button:active {
-      transform: scale(0.98);
+    .voice-orb::after {
+      inset: -15px;
     }
 
-    .voice-button.active {
-      background: #a98cff;
-      color: #130e22;
+    .voice-orb:hover {
+      transform: translateY(-2px) scale(1.035);
+      filter: saturate(1.1) brightness(1.06);
+      box-shadow:
+        0 0 0 7px rgba(109, 145, 245, 0.12),
+        0 17px 38px rgba(46, 82, 187, 0.52),
+        inset 0 1px 1px rgba(255, 255, 255, 0.8);
     }
 
-    .voice-button:disabled {
+    .voice-orb:active {
+      transform: scale(0.96);
+    }
+
+    .voice-orb.active {
+      animation: voiceOrbBreathe 1.7s ease-in-out infinite;
+      box-shadow:
+        0 0 0 8px rgba(157, 117, 255, 0.12),
+        0 0 38px rgba(157, 117, 255, 0.42),
+        0 18px 42px rgba(46, 82, 187, 0.52),
+        inset 0 1px 1px rgba(255, 255, 255, 0.85);
+    }
+
+    .voice-orb.active::before,
+    .voice-orb.active::after {
+      animation: voiceOrbRing 1.7s ease-out infinite;
+    }
+
+    .voice-orb.active::after {
+      animation-delay: 0.55s;
+    }
+
+    .voice-waves {
+      height: 29px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .voice-waves span {
+      width: 4px;
+      height: 10px;
+      display: block;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 1px 4px rgba(19, 33, 89, 0.28);
+    }
+
+    .voice-waves span:nth-child(2) { height: 21px; }
+    .voice-waves span:nth-child(3) { height: 29px; }
+    .voice-waves span:nth-child(4) { height: 21px; }
+
+    .voice-orb.active .voice-waves span {
+      animation: voiceWave 0.72s ease-in-out infinite alternate;
+    }
+
+    .voice-orb.active .voice-waves span:nth-child(2) { animation-delay: 0.14s; }
+    .voice-orb.active .voice-waves span:nth-child(3) { animation-delay: 0.28s; }
+    .voice-orb.active .voice-waves span:nth-child(4) { animation-delay: 0.1s; }
+    .voice-orb.active .voice-waves span:nth-child(5) { animation-delay: 0.22s; }
+
+    .voice-orb:disabled {
       cursor: not-allowed;
       opacity: 0.55;
+    }
+
+    .voice-label {
+      min-width: 138px;
+
+      color: var(--text);
+      text-align: center;
+      font-size: 13px;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
+
+    @keyframes voiceOrbBreathe {
+      50% { transform: scale(1.045); }
+    }
+
+    @keyframes voiceOrbRing {
+      0% { transform: scale(0.82); opacity: 0.7; }
+      100% { transform: scale(1.15); opacity: 0; }
+    }
+
+    @keyframes voiceWave {
+      from { transform: scaleY(0.65); }
+      to { transform: scaleY(1.18); }
     }
 
     .input-hint {
@@ -1271,16 +1396,18 @@
             +
           </button>
 
-          <button
-            id="voiceButton"
-            class="voice-button"
-            onclick="toggleVoiceConversation()"
-            title="Start a voice conversation"
-            aria-label="Start a voice conversation"
-          >
-            <span aria-hidden="true">🎙</span>
-            <span id="voiceButtonLabel">Start talking</span>
-          </button>
+          <div class="voice-control">
+            <button
+              id="voiceButton"
+              class="voice-orb"
+              onclick="toggleVoiceConversation()"
+              title="Start a voice conversation"
+              aria-label="Start a voice conversation"
+            >
+              <span class="voice-waves" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></span>
+            </button>
+            <span id="voiceButtonLabel" class="voice-label">Start talking</span>
+          </div>
 
         </div>
 
@@ -1410,11 +1537,27 @@
   const voiceButton = document.getElementById("voiceButton");
   const voiceButtonLabel = document.getElementById("voiceButtonLabel");
   const voiceStatus = document.getElementById("voiceStatus");
+  const settingsPanel = document.getElementById("settingsPanel");
+  const adminPanel = document.getElementById("adminPanel");
+
+  function closePanelsExcept(except = null) {
+    [memoryPanel, settingsPanel, adminPanel].forEach(panel => {
+      if (panel !== except) panel.style.display = "none";
+    });
+
+    if (except !== sidebar) closeSidebar();
+  }
 
   function toggleSettingsPanel() {
-    const panel = document.getElementById("settingsPanel");
-    panel.style.display = panel.style.display === "block" ? "none" : "block";
-    if (panel.style.display === "block") loadProfile();
+    const isVisible = settingsPanel.style.display === "block";
+    if (isVisible) {
+      settingsPanel.style.display = "none";
+      return;
+    }
+
+    closePanelsExcept(settingsPanel);
+    settingsPanel.style.display = "block";
+    loadProfile();
   }
 
   async function loadProfile() {
@@ -1438,8 +1581,8 @@
   }
 
   async function loadAdminUsage() {
-    const panel = document.getElementById("adminPanel");
-    panel.style.display = "block";
+    closePanelsExcept(adminPanel);
+    adminPanel.style.display = "block";
     const output = document.getElementById("adminUsage");
     output.textContent = "Loading…";
     const response = await fetch("/api/admin/usage");
@@ -1448,7 +1591,7 @@
     output.innerHTML = `<strong>${data.summary.requests}</strong> AI requests · <strong>${data.summary.users}</strong> active users<br><br>${Number(data.summary.input_chars).toLocaleString()} input characters · ${Number(data.summary.output_chars).toLocaleString()} output characters`;
   }
 
-  function closeAdminPanel() { document.getElementById("adminPanel").style.display = "none"; }
+  function closeAdminPanel() { adminPanel.style.display = "none"; }
 
   function setVoiceStatus(text) {
     voiceStatus.textContent = text;
@@ -1632,6 +1775,7 @@
 
     } else {
 
+      closePanelsExcept(sidebar);
       sidebar.classList.add("open");
       sidebarOverlay.classList.add("show");
 
@@ -1662,6 +1806,7 @@
 
     } else {
 
+      closePanelsExcept(memoryPanel);
       memoryPanel.style.display = "block";
 
       loadMemories();
@@ -1715,6 +1860,52 @@
      MESSAGE CREATION
      ================================================== */
 
+  function createSafeExternalLink(rawUrl, label = rawUrl) {
+    try {
+      const href = rawUrl.startsWith("www.") ? `https://${rawUrl}` : rawUrl;
+      const url = new URL(href);
+
+      if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+
+      const link = document.createElement("a");
+      link.className = "message-link";
+      link.href = url.href;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = label;
+      return link;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function appendLinkifiedText(container, content) {
+    const value = typeof content === "string" ? content : "";
+    const urlPattern = /(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+    let cursor = 0;
+    let match;
+
+    while ((match = urlPattern.exec(value))) {
+      container.appendChild(document.createTextNode(value.slice(cursor, match.index)));
+
+      const rawUrl = match[0];
+      const trailingPunctuation = rawUrl.match(/[.,!?;:]+$/)?.[0] || "";
+      const urlWithoutPunctuation = rawUrl.slice(0, rawUrl.length - trailingPunctuation.length);
+      const link = createSafeExternalLink(urlWithoutPunctuation, urlWithoutPunctuation);
+
+      if (link) {
+        container.appendChild(link);
+        if (trailingPunctuation) container.appendChild(document.createTextNode(trailingPunctuation));
+      } else {
+        container.appendChild(document.createTextNode(rawUrl));
+      }
+
+      cursor = match.index + rawUrl.length;
+    }
+
+    container.appendChild(document.createTextNode(value.slice(cursor)));
+  }
+
   function createMessageElement(
     role,
     content,
@@ -1744,8 +1935,7 @@
           : "ai"
       );
 
-    message.textContent =
-      content;
+    appendLinkifiedText(message, content);
 
 
     row.appendChild(message);
@@ -2417,7 +2607,18 @@
       if (Array.isArray(data.sources) && data.sources.length) {
         const sources = document.createElement("div");
         sources.className = "message-meta";
-        sources.textContent = "Sources: " + data.sources.map(source => `[${source.number}] ${source.title}`).join(" · ");
+        sources.appendChild(document.createTextNode("Sources: "));
+        data.sources.forEach((source, index) => {
+          const label = `[${source.number}] ${source.title || "Source"}`;
+          const link = createSafeExternalLink(source.url || "", label);
+          if (link) {
+            link.classList.add("source-link");
+            sources.appendChild(link);
+          } else {
+            sources.appendChild(document.createTextNode(label));
+          }
+          if (index < data.sources.length - 1) sources.appendChild(document.createTextNode(" · "));
+        });
         aiRow.querySelector(".message").appendChild(sources);
       }
 
@@ -2732,10 +2933,7 @@
       }
 
 
-      closeSidebar();
-
-      memoryPanel.style.display =
-        "none";
+      closePanelsExcept();
     }
   );
 
