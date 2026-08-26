@@ -12,6 +12,7 @@ const MAX_CONTEXT_MESSAGES = 24;
 const VOICE_MODEL = "@cf/deepgram/aura-1";
 const VOICE_SPEAKER = "luna";
 const TRANSCRIPTION_MODEL = "@cf/openai/whisper-large-v3-turbo";
+const FALLBACK_TRANSCRIPTION_MODEL = "@cf/openai/whisper";
 const MAX_TRANSCRIPTION_AUDIO_BYTES = 5 * 1024 * 1024;
 
 const DEFAULT_HOME_LOCATION = "Eston, England";
@@ -304,6 +305,27 @@ function extractAIResponse(result) {
   }
 
   return "";
+}
+
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunkSize = 0x8000;
+
+  for (
+    let offset = 0;
+    offset < bytes.length;
+    offset += chunkSize
+  ) {
+    binary += String.fromCharCode(
+      ...bytes.subarray(
+        offset,
+        Math.min(offset + chunkSize, bytes.length)
+      )
+    );
+  }
+
+  return btoa(binary);
 }
 
 
@@ -1689,14 +1711,27 @@ export default {
           return json({ error: "Voice messages can be up to one minute long." }, 413);
         }
 
-        const result = await env.AI.run(TRANSCRIPTION_MODEL, {
-          audio: [...audio],
-          task: "transcribe",
-          language: "en",
-          vad_filter: true,
-          beam_size: 1,
-          condition_on_previous_text: false
-        });
+        let result;
+
+        try {
+          result = await env.AI.run(TRANSCRIPTION_MODEL, {
+            audio: bytesToBase64(audio),
+            task: "transcribe",
+            language: "en",
+            vad_filter: true,
+            beam_size: 1,
+            condition_on_previous_text: false
+          });
+        } catch (turboError) {
+          console.warn(
+            "Whisper Turbo transcription failed; using fallback.",
+            turboError
+          );
+          result = await env.AI.run(
+            FALLBACK_TRANSCRIPTION_MODEL,
+            { audio: [...audio] }
+          );
+        }
 
         return json({ text: cleanText(result?.text, 2000) });
       } catch (error) {

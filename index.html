@@ -1982,6 +1982,7 @@ function primeVoiceOutput() {
       startedAt: performance.now(),
       silenceStartedAt: 0,
       speechStarted: false,
+      speechFrames: 0,
       noiseFloor: 0.008
     };
     voiceSilenceMonitor = monitor;
@@ -2004,20 +2005,35 @@ function primeVoiceOutput() {
       const level = Math.sqrt(energy / samples.length);
       const elapsed = now - monitor.startedAt;
 
-      if (!monitor.speechStarted && elapsed < 650) {
+      if (
+        !monitor.speechStarted &&
+        elapsed < 300 &&
+        level < 0.012
+      ) {
         monitor.noiseFloor =
           monitor.noiseFloor * 0.85 + level * 0.15;
       }
 
-      const speechThreshold = Math.max(0.014, monitor.noiseFloor * 2.2);
-      if (level >= speechThreshold) {
-        monitor.speechStarted = true;
+      const speechThreshold = Math.max(0.012, monitor.noiseFloor * 2.5);
+      const ignoresButtonNoise = elapsed < 350;
+
+      if (!monitor.speechStarted) {
+        if (!ignoresButtonNoise && level >= speechThreshold) {
+          monitor.speechFrames += 1;
+          if (monitor.speechFrames >= 6) {
+            monitor.speechStarted = true;
+            monitor.silenceStartedAt = 0;
+          }
+        } else {
+          monitor.speechFrames = 0;
+        }
+      } else if (level >= speechThreshold * 0.75) {
         monitor.silenceStartedAt = 0;
-      } else if (monitor.speechStarted) {
+      } else {
         if (!monitor.silenceStartedAt) monitor.silenceStartedAt = now;
         if (
-          now - monitor.silenceStartedAt >= 900 &&
-          elapsed >= 1200
+          now - monitor.silenceStartedAt >= 1000 &&
+          elapsed >= 1600
         ) {
           setVoiceStatus("Sending…");
           stopVoiceRecording();
@@ -2116,7 +2132,7 @@ function primeVoiceOutput() {
       await startVoiceSilenceMonitor(stream, recorder).catch(error => {
         console.warn("Automatic voice send is unavailable:", error);
       });
-      setVoiceStatus("Listening — I’ll send when you finish speaking.");
+      setVoiceStatus("Listening — start speaking when you’re ready.");
       updateVoiceButton();
 
       voiceRecordingTimer = setTimeout(() => {
