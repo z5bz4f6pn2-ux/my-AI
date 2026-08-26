@@ -1,6 +1,6 @@
 {
   "name": "my-ai",
-  "main": "worker.js",
+  "main": "worker-v2.js",
   "compatibility_date": "2026-08-11",
 
   "assets": {
