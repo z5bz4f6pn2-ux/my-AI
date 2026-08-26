@@ -1663,6 +1663,8 @@
   let voiceStream = null;
   let voiceRecordingTimer = null;
   let voiceSilenceMonitor = null;
+  let voiceInterruptionMonitor = null;
+  let voiceInterruptionRequestId = 0;
   let voiceConversationActive = false;
   let assistantIsSpeaking = false;
   let voicePlayer = null;
@@ -1854,6 +1856,8 @@ function primeVoiceOutput() {
 }
 
   function clearVoiceAudio() {
+    stopVoiceInterruptionMonitor();
+
     if (voiceAudio) {
       voiceAudio.onplay = null;
       voiceAudio.onended = null;
@@ -1890,6 +1894,142 @@ function primeVoiceOutput() {
     stopLunaSpeech("Luna stopped — starting the microphone…");
     primeVoiceOutput();
     await startVoiceRecording();
+  }
+
+  function stopVoiceInterruptionMonitor(releaseStream = true) {
+    voiceInterruptionRequestId += 1;
+    const monitor = voiceInterruptionMonitor;
+    voiceInterruptionMonitor = null;
+    if (!monitor) return null;
+
+    cancelAnimationFrame(monitor.frameId);
+    try { monitor.source.disconnect(); } catch {}
+    try { monitor.analyser.disconnect(); } catch {}
+    if (monitor.context.state !== "closed") {
+      monitor.context.close().catch(() => {});
+    }
+    if (releaseStream) releaseVoiceStream(monitor.stream);
+    return monitor.stream;
+  }
+
+  async function interruptLunaWithVoice(monitor) {
+    if (
+      voiceInterruptionMonitor !== monitor ||
+      !assistantIsSpeaking ||
+      !voiceConversationActive
+    ) {
+      return;
+    }
+
+    const stream = stopVoiceInterruptionMonitor(false);
+    stopLunaSpeech("Luna stopped — listening to you…");
+    primeVoiceOutput();
+    await startVoiceRecording(stream);
+  }
+
+  async function startVoiceInterruptionMonitor() {
+    stopVoiceInterruptionMonitor();
+    if (
+      !voiceConversationActive ||
+      !assistantIsSpeaking ||
+      !navigator.mediaDevices?.getUserMedia
+    ) {
+      return;
+    }
+
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    const requestId = ++voiceInterruptionRequestId;
+    let stream = null;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+
+      if (
+        requestId !== voiceInterruptionRequestId ||
+        !voiceConversationActive ||
+        !assistantIsSpeaking
+      ) {
+        releaseVoiceStream(stream);
+        return;
+      }
+
+      const context = new AudioContextClass();
+      const source = context.createMediaStreamSource(stream);
+      const analyser = context.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.18;
+      source.connect(analyser);
+      if (context.state === "suspended") await context.resume();
+
+      const samples = new Uint8Array(analyser.fftSize);
+      const monitor = {
+        stream,
+        context,
+        source,
+        analyser,
+        frameId: 0,
+        startedAt: performance.now(),
+        noiseFloor: 0.012,
+        speechFrames: 0
+      };
+      voiceInterruptionMonitor = monitor;
+
+      const checkLevel = now => {
+        if (
+          voiceInterruptionMonitor !== monitor ||
+          !assistantIsSpeaking ||
+          !voiceConversationActive
+        ) {
+          return;
+        }
+
+        analyser.getByteTimeDomainData(samples);
+        let energy = 0;
+        let peak = 0;
+        for (const sample of samples) {
+          const amplitude = Math.abs((sample - 128) / 128);
+          energy += amplitude * amplitude;
+          peak = Math.max(peak, amplitude);
+        }
+
+        const rms = Math.sqrt(energy / samples.length);
+        const activity = Math.max(rms, peak * 0.25);
+        const elapsed = now - monitor.startedAt;
+
+        if (elapsed < 650) {
+          monitor.noiseFloor = monitor.noiseFloor * 0.85 + activity * 0.15;
+        } else {
+          const speechThreshold = Math.max(0.03, monitor.noiseFloor * 2.8);
+          if (activity >= speechThreshold) {
+            monitor.speechFrames += 1;
+          } else {
+            monitor.speechFrames = Math.max(0, monitor.speechFrames - 2);
+            if (activity < speechThreshold * 0.7) {
+              monitor.noiseFloor = monitor.noiseFloor * 0.98 + activity * 0.02;
+            }
+          }
+
+          if (monitor.speechFrames >= 12) {
+            void interruptLunaWithVoice(monitor);
+            return;
+          }
+        }
+
+        monitor.frameId = requestAnimationFrame(checkLevel);
+      };
+
+      monitor.frameId = requestAnimationFrame(checkLevel);
+    } catch (error) {
+      if (stream) releaseVoiceStream(stream);
+      console.warn("Hands-free voice interruption is unavailable:", error);
+    }
   }
 
   async function resumeVoiceListening() {
@@ -1933,14 +2073,18 @@ function primeVoiceOutput() {
     voiceButtonLabel.textContent = recording
       ? "Listening…"
       : assistantIsSpeaking
-        ? "Interrupt Luna"
+        ? voiceConversationActive
+          ? "Talk to interrupt"
+          : "Interrupt Luna"
       : voiceConversationActive
         ? "Sending voice…"
         : "Start talking";
     voiceButton.title = recording
       ? "Listening — sends automatically when you finish"
       : assistantIsSpeaking
-        ? "Interrupt Luna and start talking"
+        ? voiceConversationActive
+          ? "Talk over Luna or tap to interrupt"
+          : "Interrupt Luna and start talking"
       : voiceConversationActive
         ? "Sending voice message"
         : "Start a voice conversation";
@@ -2081,14 +2225,14 @@ function primeVoiceOutput() {
     await startVoiceRecording();
   }
 
-  async function startVoiceRecording() {
+  async function startVoiceRecording(existingStream = null) {
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
       showToast("Voice input is not supported in this browser. Try Safari on your phone.");
       return;
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const stream = existingStream || await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
@@ -2273,8 +2417,13 @@ function primeVoiceOutput() {
         speechAbortController = null;
         playbackStarted = true;
         clearTimeout(speechStartTimer);
-        setVoiceStatus("Luna is speaking…");
+        setVoiceStatus(voiceConversationActive
+          ? "Luna is speaking — talk to interrupt."
+          : "Luna is speaking…");
         updateVoiceButton();
+        if (voiceConversationActive) {
+          void startVoiceInterruptionMonitor();
+        }
       };
       audio.onended = () => {
         if (requestId !== speechRequestId) return;
