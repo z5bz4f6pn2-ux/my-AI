@@ -12,7 +12,7 @@ Personal AI assistant built on Cloudflare Workers AI, D1 and Cloudflare Access.
 - Voice-first conversations: spoken turns are sent automatically and replies are read aloud
 - Interruptible Luna voice playback: tap the voice button while Luna is speaking to stop her and start recording
 - England-first place matching with Eston, England as the default home location
-- Location-aware time, date and weather using the Met Office feed when configured, with a UK Met Office model fallback
+- Concise location-aware time, date and weather using the Met Office feed when configured, with a UK Met Office model fallback
 - Profile and response-style settings
 - A private aggregate usage endpoint and dashboard for the configured admin email
 
@@ -32,4 +32,4 @@ Tom's AI supports the official Met Office Weather DataHub Global Spot hourly API
 npx wrangler secret put MET_OFFICE_API_KEY
 ```
 
-If the secret is not present or the Met Office request is temporarily unavailable, UK locations use Open-Meteo's delivery of the UKMO seamless model and identify that fallback in the answer. Weather answers always include the verified place, source and data time. The saved home location defaults to `Eston, England` and can be changed in Profile & settings.
+If the secret is not present or the Met Office request is temporarily unavailable, UK locations use Open-Meteo's delivery of the UKMO seamless model. Weather replies are deliberately concise and only state the verified place, temperature and wind. The saved home location defaults to `Eston, England` and can be changed in Profile & settings.

@@ -325,6 +325,12 @@ function asksForCurrentDateOrTime(message) {
 }
 
 
+function asksForCurrentTime(message) {
+  return asksForCurrentDateOrTime(message) &&
+    /\btime\b/i.test(message);
+}
+
+
 function getCurrentDateTimeContext(
   body,
   preferredTimeZone = ""
@@ -424,13 +430,12 @@ function getCurrentDateTimeContext(
 
   const time =
     new Intl.DateTimeFormat(
-      "en-GB",
+      "en-US",
       {
         timeZone,
-        hour: "2-digit",
+        hour: "numeric",
         minute: "2-digit",
-        second: "2-digit",
-        hour12: false
+        hour12: true
       }
     ).format(displayDate);
 
@@ -466,9 +471,7 @@ function asksForSimpleCurrentWeather(message) {
     return false;
   }
 
-  return /\b(?:now|currently|current|right\s+now)\b/i.test(message) ||
-    /\bwhat(?:'s|\s+is)\s+(?:the\s+)?(?:weather|temperature)\b/i.test(message) ||
-    /\bhow\s+(?:hot|cold|warm|chilly)\s+is\s+it\b/i.test(message);
+  return true;
 }
 
 
@@ -1289,11 +1292,8 @@ function createWeatherContextText(weather) {
 Verified place: ${weather.location.displayName}
 Coordinates used: ${weather.location.latitude}, ${weather.location.longitude}
 Time zone: ${weather.location.timezone}
-Provider: ${weather.provider}
-Forecast model: ${weather.model}
-Data time/model update: ${weather.updatedAt}
 
-CURRENT CONDITIONS (location-specific forecast estimate, not a thermometer at the user's house):
+CURRENT CONDITIONS:
 Time: ${current.time}
 Temperature: ${formatWeatherValue(current.temperature, "°C")}
 Feels like: ${formatWeatherValue(current.feelsLike, "°C")}
@@ -1312,24 +1312,19 @@ ${daily || "No daily summary supplied by this provider."}
 
 
 function createCurrentWeatherAnswer(
-  weather,
-  dateTime
+  weather
 ) {
   const current = weather.current;
   const temperature = formatWeatherValue(
     current.temperature,
     "°C"
   );
-  const feelsLike = formatWeatherValue(
-    current.feelsLike,
-    "°C"
+  const wind = formatWeatherValue(
+    current.windSpeed,
+    " km/h"
   );
-  const wind = current.windSpeed === null ||
-    current.windSpeed === undefined
-    ? ""
-    : ` Wind is ${current.windSpeed} km/h.`;
 
-  return `In ${weather.location.displayName}, it is ${temperature} and ${current.condition}. It feels like ${feelsLike}.${wind} The local time is ${dateTime.time} on ${dateTime.date}. Source: ${weather.provider}, updated ${weather.updatedAt}. This is a local forecast estimate, so the temperature directly outside your home can differ slightly.`;
+  return `In ${weather.location.displayName}, the temperature is ${temperature}. Wind is ${wind}.`;
 }
 
 const EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5";
@@ -2413,12 +2408,7 @@ export default {
             ...webResults
           ].slice(0, 5);
         }
-        const sourceResults = [
-          ...(weather?.source
-            ? [weather.source]
-            : []),
-          ...webResults
-        ].slice(0, 5);
+        const sourceResults = webResults.slice(0, 5);
         const webText = sourceResults.length
           ? sourceResults.map((result, index) => `[${index + 1}] ${result.title}\n${result.snippet}\nSource: ${result.url}`).join("\n\n")
           : "No current web information was needed or available.";
@@ -2575,7 +2565,7 @@ VERIFIED WEATHER DATA:
 
 ${weatherText}
 
-For weather questions, use only this verified weather data. Never invent a temperature, condition, forecast, location or update time. State that the temperature is a location-specific forecast estimate rather than a thermometer reading at the user's home. If the requested day or hour is outside the supplied range, say that reliable data is not available for that time. Mention the provider and data time naturally. Cite the supplied weather source as [1].
+For weather questions, use only this verified weather data. Never invent a temperature, wind speed, forecast or location. Answer with only the requested place and time, temperature, and wind. Do not mention the weather condition, feels-like temperature, rain, provider, source, model, update time, forecast age, estimates, uncertainty, citations, or anything about conditions differing from the user's home. If the requested day or hour is outside the supplied range, say only that weather data is not available for that time.
 
 CONVERSATION:
 
@@ -2645,7 +2635,7 @@ ${message}
         ) {
 
           response =
-            `I verified ${resolvedLocation.displayName}, but the weather service is temporarily unavailable. I won't guess the temperature. The local time is ${currentDateTime.time} on ${currentDateTime.date}.`;
+            `Weather data for ${resolvedLocation.displayName} is temporarily unavailable.`;
 
         } else if (
           weather &&
@@ -2656,9 +2646,17 @@ ${message}
 
           response =
             createCurrentWeatherAnswer(
-              weather,
-              currentDateTime
+              weather
             );
+
+        } else if (
+          asksForCurrentTime(
+            message
+          ) &&
+          !weatherRequested
+        ) {
+
+          response = currentDateTime.time;
 
         } else if (
           asksForCurrentDateOrTime(
@@ -2667,9 +2665,7 @@ ${message}
           !weatherRequested
         ) {
 
-          response = resolvedLocation
-            ? `In ${resolvedLocation.displayName}, it is ${currentDateTime.time} on ${currentDateTime.date} (${currentDateTime.timeZone}).`
-            : `It is ${currentDateTime.time} on ${currentDateTime.date} (${currentDateTime.timeZone}).`;
+          response = currentDateTime.date;
 
         } else {
 
