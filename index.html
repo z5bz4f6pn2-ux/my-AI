@@ -1662,6 +1662,7 @@
   let voiceRecorder = null;
   let voiceStream = null;
   let voiceRecordingTimer = null;
+  let voiceSilenceMonitor = null;
   let voiceConversationActive = false;
   let assistantIsSpeaking = false;
   let voicePlayer = null;
@@ -1946,6 +1947,90 @@ function primeVoiceOutput() {
     if (stream === voiceStream) voiceStream = null;
   }
 
+  function stopVoiceSilenceMonitor() {
+    const monitor = voiceSilenceMonitor;
+    voiceSilenceMonitor = null;
+    if (!monitor) return;
+
+    cancelAnimationFrame(monitor.frameId);
+    try { monitor.source.disconnect(); } catch {}
+    try { monitor.analyser.disconnect(); } catch {}
+    if (monitor.context.state !== "closed") {
+      monitor.context.close().catch(() => {});
+    }
+  }
+
+  async function startVoiceSilenceMonitor(stream, recorder) {
+    stopVoiceSilenceMonitor();
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    const context = new AudioContextClass();
+    const source = context.createMediaStreamSource(stream);
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.15;
+    source.connect(analyser);
+    if (context.state === "suspended") await context.resume();
+
+    const samples = new Uint8Array(analyser.fftSize);
+    const monitor = {
+      context,
+      source,
+      analyser,
+      frameId: 0,
+      startedAt: performance.now(),
+      silenceStartedAt: 0,
+      speechStarted: false,
+      noiseFloor: 0.008
+    };
+    voiceSilenceMonitor = monitor;
+
+    const checkLevel = now => {
+      if (
+        voiceSilenceMonitor !== monitor ||
+        voiceRecorder !== recorder ||
+        recorder.state !== "recording"
+      ) {
+        return;
+      }
+
+      analyser.getByteTimeDomainData(samples);
+      let energy = 0;
+      for (const sample of samples) {
+        const amplitude = (sample - 128) / 128;
+        energy += amplitude * amplitude;
+      }
+      const level = Math.sqrt(energy / samples.length);
+      const elapsed = now - monitor.startedAt;
+
+      if (!monitor.speechStarted && elapsed < 650) {
+        monitor.noiseFloor =
+          monitor.noiseFloor * 0.85 + level * 0.15;
+      }
+
+      const speechThreshold = Math.max(0.014, monitor.noiseFloor * 2.2);
+      if (level >= speechThreshold) {
+        monitor.speechStarted = true;
+        monitor.silenceStartedAt = 0;
+      } else if (monitor.speechStarted) {
+        if (!monitor.silenceStartedAt) monitor.silenceStartedAt = now;
+        if (
+          now - monitor.silenceStartedAt >= 900 &&
+          elapsed >= 1200
+        ) {
+          setVoiceStatus("Sending…");
+          stopVoiceRecording();
+          return;
+        }
+      }
+
+      monitor.frameId = requestAnimationFrame(checkLevel);
+    };
+
+    monitor.frameId = requestAnimationFrame(checkLevel);
+  }
+
   async function toggleVoiceConversation() {
     if (voiceRecorder?.state === "recording") {
       stopVoiceRecording();
@@ -1997,6 +2082,7 @@ function primeVoiceOutput() {
 
       recorder.onerror = () => {
         recorderFailed = true;
+        stopVoiceSilenceMonitor();
         if (voiceRecorder === recorder) voiceRecorder = null;
         releaseVoiceStream(stream);
         voiceConversationActive = false;
@@ -2007,6 +2093,7 @@ function primeVoiceOutput() {
 
       recorder.onstop = async () => {
         clearTimeout(voiceRecordingTimer);
+        stopVoiceSilenceMonitor();
         if (voiceRecorder === recorder) voiceRecorder = null;
         releaseVoiceStream(stream);
         if (recorderFailed) return;
@@ -2025,8 +2112,11 @@ function primeVoiceOutput() {
         await sendVoiceRecording(clip);
       };
 
-      recorder.start();
-      setVoiceStatus("Listening — tap Stop & send when you finish.");
+      recorder.start(200);
+      await startVoiceSilenceMonitor(stream, recorder).catch(error => {
+        console.warn("Automatic voice send is unavailable:", error);
+      });
+      setVoiceStatus("Listening — I’ll send when you finish speaking.");
       updateVoiceButton();
 
       voiceRecordingTimer = setTimeout(() => {
@@ -2036,6 +2126,7 @@ function primeVoiceOutput() {
         }
       }, 60000);
     } catch (error) {
+      stopVoiceSilenceMonitor();
       voiceRecorder = null;
       releaseVoiceStream();
       voiceConversationActive = false;
@@ -2052,6 +2143,7 @@ function primeVoiceOutput() {
     const recorder = voiceRecorder;
     if (!recorder || recorder.state !== "recording") return;
     clearTimeout(voiceRecordingTimer);
+    stopVoiceSilenceMonitor();
     setVoiceStatus(timedOut ? "Recording limit reached — sending…" : "Transcribing…");
     updateVoiceButton();
     recorder.stop();

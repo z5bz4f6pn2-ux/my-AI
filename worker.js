@@ -11,7 +11,7 @@ const MAX_CONTEXT_MESSAGES = 24;
 // The single built-in voice used by Tom's AI.
 const VOICE_MODEL = "@cf/deepgram/aura-1";
 const VOICE_SPEAKER = "luna";
-const TRANSCRIPTION_MODEL = "@cf/openai/whisper";
+const TRANSCRIPTION_MODEL = "@cf/openai/whisper-large-v3-turbo";
 const MAX_TRANSCRIPTION_AUDIO_BYTES = 5 * 1024 * 1024;
 
 const DEFAULT_HOME_LOCATION = "Eston, England";
@@ -1368,6 +1368,29 @@ async function getRelevantMemories(db, env, userId, query) {
     WHERE user_id = ? ORDER BY updated_at DESC LIMIT 80
   `).bind(userId).all();
   const memories = result.results || [];
+
+  const lexicalMatches = memories
+    .map(memory => ({
+      ...memory,
+      score: lexicalSimilarity(query, memory.memory)
+    }))
+    .filter(memory => memory.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8);
+
+  if (lexicalMatches.length > 0) {
+    return lexicalMatches;
+  }
+
+  const explicitlyAsksForMemory =
+    /\b(?:remember|memory|memories|what\s+do\s+you\s+know\s+about\s+me|what\s+do\s+i\s+like|my\s+favou?rite)\b/i.test(
+      query
+    );
+
+  if (!explicitlyAsksForMemory) {
+    return [];
+  }
+
   try {
     const queryEmbedding = await createEmbedding(env, query);
     if (queryEmbedding) {
@@ -1385,7 +1408,7 @@ async function getRelevantMemories(db, env, userId, query) {
   } catch (error) {
     console.warn("Semantic memory retrieval unavailable", error);
   }
-  return memories.slice(0, 8);
+  return [];
 }
 
 async function searchWeb(query) {
@@ -1503,7 +1526,8 @@ export default {
 
   async fetch(
     request,
-    env
+    env,
+    ctx
   ) {
 
     /*
@@ -1666,7 +1690,12 @@ export default {
         }
 
         const result = await env.AI.run(TRANSCRIPTION_MODEL, {
-          audio: [...audio]
+          audio: [...audio],
+          task: "transcribe",
+          language: "en",
+          vad_filter: true,
+          beam_size: 1,
+          condition_on_previous_text: false
         });
 
         return json({ text: cleanText(result?.text, 2000) });
@@ -2377,11 +2406,70 @@ export default {
           .run();
 
 
+        const canAnswerWithoutModel = Boolean(
+          locationLookupError ||
+          (weatherRequested && !weather) ||
+          (
+            weather &&
+            asksForSimpleCurrentWeather(message)
+          ) ||
+          (
+            asksForCurrentDateOrTime(message) &&
+            !weatherRequested
+          )
+        );
+
+
         /* ----------------------------------------------
-           GET SAVED MEMORIES
+           GET CONTEXT IN PARALLEL
            ---------------------------------------------- */
 
-        const memories = await getRelevantMemories(env.DB, env, userId, message);
+        const memoriesPromise = canAnswerWithoutModel
+          ? Promise.resolve([])
+          : getRelevantMemories(
+              env.DB,
+              env,
+              userId,
+              message
+            ).catch(error => {
+              console.warn(
+                "Memory retrieval unavailable",
+                error
+              );
+              return [];
+            });
+
+        const webResultsPromise =
+          !canAnswerWithoutModel && webSearchRequested
+            ? searchWeb(message).catch(error => {
+                console.warn("Web search failed", error);
+                return [];
+              })
+            : Promise.resolve([]);
+
+        const databaseHistoryPromise = canAnswerWithoutModel
+          ? Promise.resolve([])
+          : getConversationContext(
+              env.DB,
+              currentConversationId,
+              userId
+            ).catch(error => {
+              console.error(
+                "Database history error:",
+                error
+              );
+              return [];
+            });
+
+        const [
+          memories,
+          searchedWebResults,
+          databaseHistory
+        ] = await Promise.all([
+          memoriesPromise,
+          webResultsPromise,
+          databaseHistoryPromise
+        ]);
 
         const memoryText =
           memories.length > 0
@@ -2393,10 +2481,7 @@ export default {
                 .join("\n")
             : "No relevant saved memories.";
 
-        let webResults = [];
-        if (webSearchRequested) {
-          try { webResults = await searchWeb(message); } catch (error) { console.warn("Web search failed", error); }
-        }
+        let webResults = searchedWebResults;
         if (wantsVideoLink(message)) {
           const query = encodeURIComponent(message.slice(0, 300));
           webResults = [
@@ -2413,34 +2498,12 @@ export default {
           ? sourceResults.map((result, index) => `[${index + 1}] ${result.title}\n${result.snippet}\nSource: ${result.url}`).join("\n\n")
           : "No current web information was needed or available.";
         const weatherText =
-          createWeatherContextText(weather);
+          canAnswerWithoutModel
+            ? "Not needed for this direct answer."
+            : createWeatherContextText(weather);
         const attachmentText = attachments.length
           ? attachments.map(file => `File: ${file.name} (${file.type || "unknown type"})\n${file.text || "No extractable text."}`).join("\n\n")
           : "No attachments.";
-
-
-        /* ----------------------------------------------
-           GET REAL CONVERSATION CONTEXT
-           ---------------------------------------------- */
-
-        let databaseHistory = [];
-
-        try {
-
-          databaseHistory =
-            await getConversationContext(
-              env.DB,
-              currentConversationId,
-              userId
-            );
-
-        } catch (historyError) {
-
-          console.error(
-            "Database history error:",
-            historyError
-          );
-        }
 
 
         const conversationHistory =
@@ -2697,36 +2760,33 @@ ${message}
            SAVE AI RESPONSE
            ---------------------------------------------- */
 
-        await env.DB
-          .prepare(`
-            INSERT INTO messages
-            (conversation_id, role, content)
-            VALUES (?, ?, ?)
-          `)
-          .bind(
-            currentConversationId,
-            "assistant",
-            response
-          )
-          .run();
+        await env.DB.batch([
+          env.DB
+            .prepare(`
+              INSERT INTO messages
+              (conversation_id, role, content)
+              VALUES (?, ?, ?)
+            `)
+            .bind(
+              currentConversationId,
+              "assistant",
+              response
+            ),
+          env.DB
+            .prepare(`
+              UPDATE conversations
+              SET updated_at = current_timestamp
+              WHERE id = ?
+              AND user_id = ?
+            `)
+            .bind(
+              currentConversationId,
+              userId
+            )
+        ]);
 
 
-        /* ----------------------------------------------
-           UPDATE CONVERSATION
-           ---------------------------------------------- */
-
-        await env.DB
-          .prepare(`
-            UPDATE conversations
-            SET updated_at = current_timestamp
-            WHERE id = ?
-            AND user_id = ?
-          `)
-          .bind(
-            currentConversationId,
-            userId
-          )
-          .run();
+        const postResponseTasks = async () => {
 
 
         /* ----------------------------------------------
@@ -2976,6 +3036,17 @@ NO
           INSERT INTO usage_events (user_id, event_type, input_chars, output_chars)
           VALUES (?, 'chat', ?, ?)
         `).bind(userId, message.length, response.length).run();
+
+        };
+
+        ctx.waitUntil(
+          postResponseTasks().catch(error => {
+            console.error(
+              "Post-response task error:",
+              error
+            );
+          })
+        );
 
 
         /* ----------------------------------------------

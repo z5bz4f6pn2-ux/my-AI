@@ -9,8 +9,9 @@ Personal AI assistant built on Cloudflare Workers AI, D1 and Cloudflare Access.
 - Relevant long-term memory retrieval using Workers AI embeddings, with a graceful lexical fallback for existing memories
 - Automatic web search for questions that need current or online information, with source labels
 - Text, CSV, Markdown, JSON, PDF and image attachment handling in the chat composer
-- Voice-first conversations: spoken turns are sent automatically and replies are read aloud
+- Voice-first conversations: speech is sent automatically after a short pause and replies are read aloud
 - Interruptible Luna voice playback: tap the voice button while Luna is speaking to stop her and start recording
+- Fast reply path: conversation titles, memory extraction and usage recording run after the answer is returned
 - England-first place matching with Eston, England as the default home location
 - Concise location-aware time, date and weather using the Met Office feed when configured, with a UK Met Office model fallback
 - Profile and response-style settings
