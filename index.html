@@ -1892,17 +1892,31 @@ function primeVoiceOutput() {
     await startVoiceRecording();
   }
 
-  function resumeVoiceListening() {
+  async function resumeVoiceListening() {
     clearTimeout(speechStartTimer);
     speechAbortController = null;
     assistantIsSpeaking = false;
-    if (voiceConversationActive) {
-      voiceConversationActive = false;
-      setVoiceStatus("Reply finished. Tap Start talking when you are ready.");
-    } else {
+
+    if (!voiceConversationActive) {
       setVoiceStatus("Tap Start talking when you are ready.");
+      updateVoiceButton();
+      return;
     }
+
+    setVoiceStatus("Reply finished — listening again…");
     updateVoiceButton();
+
+    await new Promise(resolve => setTimeout(resolve, 250));
+    if (
+      !voiceConversationActive ||
+      assistantIsSpeaking ||
+      isSending ||
+      voiceRecorder?.state === "recording"
+    ) {
+      return;
+    }
+
+    await startVoiceRecording();
   }
 
   function testVoice() {
@@ -2226,7 +2240,7 @@ function primeVoiceOutput() {
       if (requestId === speechRequestId && !playbackStarted) {
         speechRequestId += 1;
         showToast("Luna is taking too long. Your reply is still on screen.");
-        resumeVoiceListening();
+        void resumeVoiceListening();
       }
     }, 10000);
 
@@ -2265,13 +2279,13 @@ function primeVoiceOutput() {
       audio.onended = () => {
         if (requestId !== speechRequestId) return;
         clearVoiceAudio();
-        resumeVoiceListening();
+        void resumeVoiceListening();
       };
       audio.onerror = () => {
         if (requestId !== speechRequestId) return;
         clearVoiceAudio();
         showToast("Luna could not play. Check your phone media volume and try Test voice in Settings.");
-        resumeVoiceListening();
+        void resumeVoiceListening();
       };
       await audio.play();
     } catch (error) {
@@ -2280,17 +2294,22 @@ function primeVoiceOutput() {
       clearVoiceAudio();
       clearTimeout(speechStartTimer);
       if (error?.name === "AbortError") {
-        resumeVoiceListening();
+        void resumeVoiceListening();
         return;
       }
       showToast(error?.message || "Luna is temporarily unavailable. Your reply is still on screen.");
-      resumeVoiceListening();
+      void resumeVoiceListening();
     }
   }
 
   function speakReply(reply) {
     if (!document.getElementById("voiceReplies").checked) {
-      resumeVoiceListening();
+      assistantIsSpeaking = false;
+      if (voiceConversationActive) {
+        voiceConversationActive = false;
+        setVoiceStatus("Reply is on screen. Tap Start talking when you are ready.");
+      }
+      updateVoiceButton();
       return;
     }
 
@@ -3396,8 +3415,7 @@ function primeVoiceOutput() {
       if (replyToSpeak) {
         speakReply(replyToSpeak);
       } else if (voiceConversationActive) {
-        voiceConversationActive = false;
-        setVoiceStatus("Reply finished. Tap Start talking when you are ready.");
+        void resumeVoiceListening();
       }
 
       updateVoiceButton();
