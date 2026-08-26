@@ -1917,14 +1917,14 @@ function primeVoiceOutput() {
     const active = recording || voiceConversationActive || assistantIsSpeaking || isSending;
     voiceButton.classList.toggle("active", Boolean(active));
     voiceButtonLabel.textContent = recording
-      ? "Stop & send"
+      ? "Listening…"
       : assistantIsSpeaking
         ? "Interrupt Luna"
       : voiceConversationActive
         ? "Sending voice…"
         : "Start talking";
     voiceButton.title = recording
-      ? "Stop and send voice message"
+      ? "Listening — sends automatically when you finish"
       : assistantIsSpeaking
         ? "Interrupt Luna and start talking"
       : voiceConversationActive
@@ -2032,7 +2032,7 @@ function primeVoiceOutput() {
       } else {
         if (!monitor.silenceStartedAt) monitor.silenceStartedAt = now;
         if (
-          now - monitor.silenceStartedAt >= 1000 &&
+          now - monitor.silenceStartedAt >= 900 &&
           elapsed >= 1600
         ) {
           setVoiceStatus("Sending…");
@@ -2132,7 +2132,7 @@ function primeVoiceOutput() {
       await startVoiceSilenceMonitor(stream, recorder).catch(error => {
         console.warn("Automatic voice send is unavailable:", error);
       });
-      setVoiceStatus("Listening — start speaking when you’re ready.");
+      setVoiceStatus("Listening — speak now. I’ll send when you finish.");
       updateVoiceButton();
 
       voiceRecordingTimer = setTimeout(() => {
