@@ -1580,6 +1580,9 @@
     <div class="settings-form">
       <label>Display name <input id="displayName" maxlength="80" placeholder="How should Tom's AI address you?"></label>
       <label>Response style <select id="responseStyle"><option value="balanced">Balanced</option><option value="concise">Concise</option><option value="detailed">Detailed</option></select></label>
+      <h3 class="settings-section-title">Location</h3>
+      <label>Home location <input id="homeLocation" maxlength="120" value="Eston, England" placeholder="Town, county or full postcode"></label>
+      <p class="voice-settings-note">Used when you ask for local time or weather without naming a place. English place names are checked in England before anywhere overseas.</p>
       <h3 class="settings-section-title">Voice</h3>
       <p class="voice-settings-note">Tom's AI speaks with Luna, a natural English voice.</p>
       <label>Voice <select id="voiceSelect" disabled><option value="luna">Luna — natural English voice</option></select></label>
@@ -1666,6 +1669,7 @@
   let voiceAudioUrl = null;
   let speechStartTimer = null;
   let speechRequestId = 0;
+  let speechAbortController = null;
 
 
   /* ==================================================
@@ -1736,7 +1740,10 @@
   function syncComposerControls() {
     const hasText = Boolean(messageInput.value.trim());
     sendButton.classList.toggle("ready", hasText);
-    voiceButton.classList.toggle("hidden", hasText);
+    voiceButton.classList.toggle(
+      "hidden",
+      hasText && !assistantIsSpeaking
+    );
   }
 
   function closePanelsExcept(except = null) {
@@ -1766,8 +1773,13 @@
     const data = await response.json();
     if (!response.ok) return showToast(data.error || "Unable to load settings.");
     profile = data.profile;
+    profile.preferences = {
+      ...(profile.preferences || {}),
+      homeLocation: profile.preferences?.homeLocation || "Eston, England"
+    };
     document.getElementById("displayName").value = profile.display_name || "";
     document.getElementById("responseStyle").value = profile.preferences?.responseStyle || "balanced";
+    document.getElementById("homeLocation").value = profile.preferences.homeLocation;
     document.getElementById("voiceReplies").checked = profile.preferences?.voiceReplies !== false;
     configureLunaVoice();
   }
@@ -1776,7 +1788,8 @@
     const preferences = {
       responseStyle: document.getElementById("responseStyle").value,
       voiceName: "luna",
-      voiceReplies: document.getElementById("voiceReplies").checked
+      voiceReplies: document.getElementById("voiceReplies").checked,
+      homeLocation: document.getElementById("homeLocation").value.trim() || "Eston, England"
     };
     const response = await fetch("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ displayName: document.getElementById("displayName").value, preferences }) });
     const data = await response.json();
@@ -1856,8 +1869,31 @@ function primeVoiceOutput() {
     }
   }
 
+  function stopLunaSpeech(status = "Luna stopped. Tap Start talking when you are ready.") {
+    speechRequestId += 1;
+    clearTimeout(speechStartTimer);
+
+    if (speechAbortController) {
+      speechAbortController.abort();
+      speechAbortController = null;
+    }
+
+    clearVoiceAudio();
+    assistantIsSpeaking = false;
+    voiceConversationActive = false;
+    setVoiceStatus(status);
+    updateVoiceButton();
+  }
+
+  async function interruptLunaAndListen() {
+    stopLunaSpeech("Luna stopped — starting the microphone…");
+    primeVoiceOutput();
+    await startVoiceRecording();
+  }
+
   function resumeVoiceListening() {
     clearTimeout(speechStartTimer);
+    speechAbortController = null;
     assistantIsSpeaking = false;
     if (voiceConversationActive) {
       voiceConversationActive = false;
@@ -1881,11 +1917,15 @@ function primeVoiceOutput() {
     voiceButton.classList.toggle("active", Boolean(active));
     voiceButtonLabel.textContent = recording
       ? "Stop & send"
+      : assistantIsSpeaking
+        ? "Interrupt Luna"
       : voiceConversationActive
         ? "Sending voice…"
         : "Start talking";
     voiceButton.title = recording
       ? "Stop and send voice message"
+      : assistantIsSpeaking
+        ? "Interrupt Luna and start talking"
       : voiceConversationActive
         ? "Sending voice message"
         : "Start a voice conversation";
@@ -1912,10 +1952,13 @@ function primeVoiceOutput() {
       return;
     }
 
-    if (voiceConversationActive || isSending || assistantIsSpeaking) {
-      showToast(assistantIsSpeaking
-        ? "Please wait for Luna to finish speaking."
-        : "Your voice message is being sent.");
+    if (assistantIsSpeaking) {
+      await interruptLunaAndListen();
+      return;
+    }
+
+    if (voiceConversationActive || isSending) {
+      showToast("Your voice message is being sent.");
       return;
     }
 
@@ -2059,8 +2102,13 @@ function primeVoiceOutput() {
     if (!force && !document.getElementById("voiceReplies").checked) return;
 
     clearTimeout(speechStartTimer);
+    if (speechAbortController) {
+      speechAbortController.abort();
+    }
     clearVoiceAudio();
     const requestId = ++speechRequestId;
+    const abortController = new AbortController();
+    speechAbortController = abortController;
     let playbackStarted = false;
     assistantIsSpeaking = true;
     setVoiceStatus("Luna is preparing a reply…");
@@ -2078,7 +2126,8 @@ function primeVoiceOutput() {
       const response = await fetch("/api/speech", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: String(text || "").slice(0, 500) })
+        body: JSON.stringify({ text: String(text || "").slice(0, 500) }),
+        signal: abortController.signal
       });
 
       if (!response.ok) {
@@ -2099,6 +2148,7 @@ function primeVoiceOutput() {
     voiceAudio = audio;
       audio.onplay = () => {
         if (requestId !== speechRequestId) return;
+        speechAbortController = null;
         playbackStarted = true;
         clearTimeout(speechStartTimer);
         setVoiceStatus("Luna is speaking…");
@@ -2118,8 +2168,13 @@ function primeVoiceOutput() {
       await audio.play();
     } catch (error) {
       if (requestId !== speechRequestId) return;
+      speechAbortController = null;
       clearVoiceAudio();
       clearTimeout(speechStartTimer);
+      if (error?.name === "AbortError") {
+        resumeVoiceListening();
+        return;
+      }
       showToast(error?.message || "Luna is temporarily unavailable. Your reply is still on screen.");
       resumeVoiceListening();
     }
@@ -3068,7 +3123,12 @@ function primeVoiceOutput() {
                   ),
                 conversationId,
                 attachments: pendingAttachments,
-                preferences: profile.preferences || {},
+                preferences: {
+                  ...(profile.preferences || {}),
+                  homeLocation:
+                    profile.preferences?.homeLocation ||
+                    "Eston, England"
+                },
                 clientTimeZone:
                   Intl.DateTimeFormat()
                     .resolvedOptions()
@@ -3245,6 +3305,10 @@ function primeVoiceOutput() {
 
     if (isSending) {
       return;
+    }
+
+    if (assistantIsSpeaking) {
+      stopLunaSpeech();
     }
 
 
@@ -3463,6 +3527,10 @@ function primeVoiceOutput() {
      ================================================== */
 
   loadConversations();
+
+  loadProfile().catch(error => {
+    console.error("Profile load error:", error);
+  });
 
   autoResizeMessageInput();
 

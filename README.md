@@ -10,6 +10,9 @@ Personal AI assistant built on Cloudflare Workers AI, D1 and Cloudflare Access.
 - Automatic web search for questions that need current or online information, with source labels
 - Text, CSV, Markdown, JSON, PDF and image attachment handling in the chat composer
 - Voice-first conversations: spoken turns are sent automatically and replies are read aloud
+- Interruptible Luna voice playback: tap the voice button while Luna is speaking to stop her and start recording
+- England-first place matching with Eston, England as the default home location
+- Location-aware time, date and weather using the Met Office feed when configured, with a UK Met Office model fallback
 - Profile and response-style settings
 - A private aggregate usage endpoint and dashboard for the configured admin email
 
@@ -20,3 +23,13 @@ Apply the D1 migration before deploying the Worker. The migration only adds tabl
 Set `ADMIN_EMAIL` in your Worker environment to the email address allowed to view the private usage dashboard. Leave it blank to disable dashboard access. The variable is intentionally not a secret, but it should still be set per environment rather than committed with a personal address.
 
 The app uses the Cloudflare Workers AI binding already defined in `wrangler.jsonc`; semantic memory uses `@cf/baai/bge-base-en-v1.5`.
+
+## Met Office weather
+
+Tom's AI supports the official Met Office Weather DataHub Global Spot hourly API. Add the API key as a Worker secret; never commit it to this repository:
+
+```text
+npx wrangler secret put MET_OFFICE_API_KEY
+```
+
+If the secret is not present or the Met Office request is temporarily unavailable, UK locations use Open-Meteo's delivery of the UKMO seamless model and identify that fallback in the answer. Weather answers always include the verified place, source and data time. The saved home location defaults to `Eston, England` and can be changed in Profile & settings.

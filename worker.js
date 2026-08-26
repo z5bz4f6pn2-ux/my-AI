@@ -14,6 +14,29 @@ const VOICE_SPEAKER = "luna";
 const TRANSCRIPTION_MODEL = "@cf/openai/whisper";
 const MAX_TRANSCRIPTION_AUDIO_BYTES = 5 * 1024 * 1024;
 
+const DEFAULT_HOME_LOCATION = "Eston, England";
+const ENGLAND_TIME_ZONE = "Europe/London";
+const MET_OFFICE_WEATHER_URL =
+  "https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/hourly";
+const OPEN_METEO_GEOCODING_URL =
+  "https://geocoding-api.open-meteo.com/v1/search";
+const OPEN_METEO_FORECAST_URL =
+  "https://api.open-meteo.com/v1/forecast";
+const POSTCODES_IO_URL =
+  "https://api.postcodes.io/postcodes";
+
+const ESTON_LOCATION = Object.freeze({
+  name: "Eston",
+  displayName: "Eston, Redcar and Cleveland, England",
+  latitude: 54.55932,
+  longitude: -1.1434,
+  timezone: ENGLAND_TIME_ZONE,
+  country: "United Kingdom",
+  countryCode: "GB",
+  admin1: "England",
+  admin2: "Redcar and Cleveland"
+});
+
 // Cloudflare Access configuration for your Tom's AI application.
 const TEAM_DOMAIN =
   "https://shrill-snowflake-7123.cloudflareaccess.com";
@@ -302,12 +325,16 @@ function asksForCurrentDateOrTime(message) {
 }
 
 
-function getCurrentDateTimeContext(body) {
+function getCurrentDateTimeContext(
+  body,
+  preferredTimeZone = ""
+) {
 
   const now = new Date();
   const requestedTimeZone =
     cleanText(
-      body?.clientTimeZone,
+      preferredTimeZone ||
+        body?.clientTimeZone,
       80
     );
 
@@ -413,6 +440,896 @@ function getCurrentDateTimeContext(body) {
     timeZone: timeZoneLabel,
     utc: now.toISOString()
   };
+}
+
+
+function asksForWeather(message) {
+  return typeof message === "string" &&
+    /\b(?:weather|forecast|temperature|degrees|rain|raining|snow|snowing|wind|windy|sunny|cloudy|hot|cold|warm|chilly|umbrella)\b/i.test(message);
+}
+
+
+function asksForLocationDateOrTime(message) {
+  return typeof message === "string" &&
+    /\b(?:date|day|time)\b/i.test(message) &&
+    /\b(?:in\s+[a-z]|near\s+[a-z]|around\s+[a-z]|at\s+home|here|my\s+(?:location|area))\b/i.test(message);
+}
+
+
+function hasNonCurrentWeatherTime(message) {
+  return /\b(?:tomorrow|tonight|later|yesterday|next|last|weekend|morning|afternoon|evening|overnight|forecast|at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b/i.test(message);
+}
+
+
+function asksForSimpleCurrentWeather(message) {
+  if (!asksForWeather(message) || hasNonCurrentWeatherTime(message)) {
+    return false;
+  }
+
+  return /\b(?:now|currently|current|right\s+now)\b/i.test(message) ||
+    /\bwhat(?:'s|\s+is)\s+(?:the\s+)?(?:weather|temperature)\b/i.test(message) ||
+    /\bhow\s+(?:hot|cold|warm|chilly)\s+is\s+it\b/i.test(message);
+}
+
+
+function normalizePlaceText(value) {
+  return cleanText(value, 120)
+    .replace(/[?!.]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+
+function cleanHomeLocation(value) {
+  return normalizePlaceText(value)
+    .replace(/[^a-z0-9 .,'’()\-]/gi, "")
+    .slice(0, 120)
+    .trim();
+}
+
+
+function trimPlaceCandidate(value) {
+  return normalizePlaceText(value)
+    .replace(
+      /\s+\b(?:right\s+now|now|today|tomorrow|tonight|yesterday|this\s+(?:morning|afternoon|evening|week|weekend)|next\s+(?:week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|last\s+(?:night|week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)|at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\b.*$/i,
+      ""
+    )
+    .replace(
+      /\s+\b(?:this\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|on\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|the\s+\d{1,2}(?:st|nd|rd|th)?)|in\s+\d+\s+(?:hours?|days?|weeks?)|for\s+(?:today|tomorrow|tonight|this\s+\w+|next\s+\w+))\b.*$/i,
+      ""
+    )
+    .replace(
+      /\s+\b(?:and\s+(?:tell|show|give|the|what)|then\s+(?:tell|show|give)|please|thanks)\b.*$/i,
+      ""
+    )
+    .replace(/\s+\b(?:for|on|at|in)\s*$/i, "")
+    .replace(/^[,\s]+|[,\s]+$/g, "")
+    .trim();
+}
+
+
+function isTemporalPlaceCandidate(value) {
+  return /^(?:today|tomorrow|tonight|yesterday|now|right\s+now|this\s+(?:morning|afternoon|evening|week|weekend)|next\s+\w+|last\s+\w+|\d+\s+(?:minutes?|hours?|days?|weeks?))\b/i.test(
+    value
+  );
+}
+
+
+function extractRequestedPlace(
+  message,
+  homeLocation
+) {
+  const text = normalizePlaceText(message);
+  const home = normalizePlaceText(homeLocation) || DEFAULT_HOME_LOCATION;
+
+  if (
+    /\b(?:here|at\s+home|near\s+me|my\s+(?:location|area)|where\s+i\s+(?:am|live))\b/i.test(text)
+  ) {
+    return {
+      query: home,
+      usedHomeLocation: true
+    };
+  }
+
+  const candidates = [];
+  const prepositionPattern =
+    /\b(?:in|for|near|around)\s+([^?\n]+)/gi;
+
+  for (const match of text.matchAll(prepositionPattern)) {
+    const candidate = trimPlaceCandidate(match[1]);
+    if (
+      candidate &&
+      !isTemporalPlaceCandidate(candidate)
+    ) {
+      candidates.push(candidate);
+    }
+  }
+
+  for (const match of text.matchAll(/\bin\s+([^?\n]+)/gi)) {
+    const candidate = trimPlaceCandidate(match[1]);
+    if (
+      candidate &&
+      !isTemporalPlaceCandidate(candidate)
+    ) {
+      candidates.push(candidate);
+    }
+  }
+
+  const atPattern = /\bat\s+([^?\n]+)/gi;
+  for (const match of text.matchAll(atPattern)) {
+    const candidate = trimPlaceCandidate(match[1]);
+    if (
+      candidate &&
+      !isTemporalPlaceCandidate(candidate) &&
+      !/^\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b/i.test(candidate)
+    ) {
+      candidates.push(candidate);
+    }
+  }
+
+  const placeFirst = text.match(
+    /^([a-z][a-z .,'’-]{1,100}?)\s+(?:weather|forecast|temperature|time|date)\b/i
+  );
+
+  if (
+    placeFirst?.[1] &&
+    !/^(?:what|what's|whats|how|is|are|will|would|can|could|tell|show|give)\b/i.test(
+      placeFirst[1].trim()
+    )
+  ) {
+    const candidate = trimPlaceCandidate(placeFirst[1]);
+    if (candidate) {
+      candidates.push(candidate);
+    }
+  }
+
+  if (candidates.length > 0) {
+    return {
+      query: candidates[candidates.length - 1],
+      usedHomeLocation: false
+    };
+  }
+
+  return {
+    query: home,
+    usedHomeLocation: true
+  };
+}
+
+
+function placeKey(value) {
+  return normalizePlaceText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+
+function isEstonHomeQuery(value) {
+  const key = placeKey(value);
+  return key === "eston" ||
+    key === "eston england" ||
+    key === "eston uk" ||
+    key === "eston redcar and cleveland england";
+}
+
+
+function extractUkPostcode(value) {
+  const compact = normalizePlaceText(value)
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  const match = compact.match(
+    /\b(?:GIR0AA|[A-Z]{1,2}\d[A-Z\d]?\d[A-Z]{2})\b/
+  );
+  return match?.[0] || "";
+}
+
+
+async function geocodeUkPostcode(postcode) {
+  const endpoint =
+    `${POSTCODES_IO_URL}/${encodeURIComponent(postcode)}`;
+  const response = await fetch(
+    endpoint,
+    {
+      headers: {
+        Accept: "application/json"
+      },
+      cf: {
+        cacheEverything: true,
+        cacheTtl: 604800
+      }
+    }
+  );
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      `Postcode service returned ${response.status}.`
+    );
+  }
+
+  const data = await response.json();
+  const result = data?.result;
+
+  if (
+    !result ||
+    !Number.isFinite(Number(result.latitude)) ||
+    !Number.isFinite(Number(result.longitude))
+  ) {
+    return null;
+  }
+
+  const placeName = cleanText(
+    result.bua ||
+      result.parish ||
+      result.admin_ward ||
+      result.postcode,
+    120
+  );
+  const district = cleanText(
+    result.admin_district,
+    120
+  );
+  const country = cleanText(
+    result.country,
+    80
+  );
+  const displayParts = [
+    placeName,
+    district,
+    country,
+    cleanText(result.postcode, 16)
+  ].filter(Boolean);
+
+  return {
+    name: placeName,
+    displayName:
+      [...new Set(displayParts)].join(", "),
+    latitude: Number(result.latitude),
+    longitude: Number(result.longitude),
+    timezone: ENGLAND_TIME_ZONE,
+    country: "United Kingdom",
+    countryCode: "GB",
+    admin1: country,
+    admin2: district
+  };
+}
+
+
+function formatGeocodedPlace(result) {
+  const parts = [result.name];
+
+  if (result.admin2 && result.admin2 !== result.name) {
+    parts.push(result.admin2);
+  } else if (result.admin1 && result.admin1 !== result.name) {
+    parts.push(result.admin1);
+  }
+
+  if (result.admin1 === "England") {
+    if (!parts.includes("England")) {
+      parts.push("England");
+    }
+  } else if (result.country && !parts.includes(result.country)) {
+    parts.push(result.country);
+  }
+
+  return [...new Set(parts.filter(Boolean))].join(", ");
+}
+
+
+async function fetchGeocodingResults(
+  query,
+  englandOnly
+) {
+  const endpoint = new URL(
+    OPEN_METEO_GEOCODING_URL
+  );
+
+  endpoint.searchParams.set(
+    "name",
+    englandOnly && !/\b(?:england|united\s+kingdom|uk|gb)\b/i.test(query)
+      ? `${query}, England`
+      : query
+  );
+  endpoint.searchParams.set("count", "10");
+  endpoint.searchParams.set("language", "en");
+  endpoint.searchParams.set("format", "json");
+
+  if (englandOnly) {
+    endpoint.searchParams.set("countryCode", "GB");
+  }
+
+  const response = await fetch(
+    endpoint,
+    {
+      headers: {
+        Accept: "application/json"
+      },
+      cf: {
+        cacheEverything: true,
+        cacheTtl: 86400
+      }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Location service returned ${response.status}.`
+    );
+  }
+
+  const data = await response.json();
+  return Array.isArray(data?.results)
+    ? data.results
+    : [];
+}
+
+
+function scoreLocationResult(
+  result,
+  query
+) {
+  const requested = placeKey(query)
+    .replace(/\b(?:england|united kingdom|uk|gb)\b/g, "")
+    .trim();
+  const name = placeKey(result?.name);
+  let score = 0;
+
+  if (name === requested) {
+    score += 100;
+  } else if (
+    name &&
+    requested &&
+    (name.includes(requested) || requested.includes(name))
+  ) {
+    score += 40;
+  }
+
+  if (result?.admin1 === "England") {
+    score += 30;
+  }
+
+  score += Math.min(
+    20,
+    Math.log10(
+      Math.max(1, Number(result?.population) || 1)
+    ) * 3
+  );
+
+  return score;
+}
+
+
+async function geocodePlace(query) {
+  const cleanedQuery = normalizePlaceText(query);
+
+  if (!cleanedQuery) {
+    return null;
+  }
+
+  const postcode = extractUkPostcode(
+    cleanedQuery
+  );
+
+  if (postcode) {
+    return geocodeUkPostcode(postcode);
+  }
+
+  if (isEstonHomeQuery(cleanedQuery)) {
+    return { ...ESTON_LOCATION };
+  }
+
+  let results = await fetchGeocodingResults(
+    cleanedQuery,
+    true
+  );
+
+  let candidates = results.filter(
+    result =>
+      result?.country_code === "GB" &&
+      result?.admin1 === "England"
+  );
+
+  if (candidates.length === 0) {
+    results = await fetchGeocodingResults(
+      cleanedQuery,
+      false
+    );
+    candidates = results;
+  }
+
+  const best = candidates
+    .filter(
+      result =>
+        Number.isFinite(Number(result?.latitude)) &&
+        Number.isFinite(Number(result?.longitude)) &&
+        typeof result?.timezone === "string"
+    )
+    .sort(
+      (left, right) =>
+        scoreLocationResult(right, cleanedQuery) -
+        scoreLocationResult(left, cleanedQuery)
+    )[0];
+
+  if (!best) {
+    return null;
+  }
+
+  return {
+    name: cleanText(best.name, 120),
+    displayName: formatGeocodedPlace(best),
+    latitude: Number(best.latitude),
+    longitude: Number(best.longitude),
+    timezone: cleanText(best.timezone, 80),
+    country: cleanText(best.country, 80),
+    countryCode: cleanText(best.country_code, 8),
+    admin1: cleanText(best.admin1, 80),
+    admin2: cleanText(best.admin2, 80)
+  };
+}
+
+
+function describeWmoWeather(code) {
+  const value = Number(code);
+
+  if (value === 0) return "clear";
+  if (value === 1) return "mainly clear";
+  if (value === 2) return "partly cloudy";
+  if (value === 3) return "overcast";
+  if ([45, 48].includes(value)) return "foggy";
+  if ([51, 53, 55].includes(value)) return "drizzly";
+  if ([56, 57].includes(value)) return "freezing drizzle";
+  if ([61, 63, 65].includes(value)) return "rainy";
+  if ([66, 67].includes(value)) return "freezing rain";
+  if ([71, 73, 75, 77].includes(value)) return "snowy";
+  if ([80, 81, 82].includes(value)) return "rain showers";
+  if ([85, 86].includes(value)) return "snow showers";
+  if ([95, 96, 99].includes(value)) return "thunderstorms";
+  return "mixed conditions";
+}
+
+
+function describeMetOfficeWeather(code) {
+  const descriptions = {
+    0: "clear night",
+    1: "sunny",
+    2: "partly cloudy",
+    3: "partly cloudy",
+    5: "misty",
+    6: "foggy",
+    7: "cloudy",
+    8: "overcast",
+    9: "light rain showers",
+    10: "light rain showers",
+    11: "drizzly",
+    12: "light rain",
+    13: "heavy rain showers",
+    14: "heavy rain showers",
+    15: "heavy rain",
+    16: "sleet showers",
+    17: "sleet showers",
+    18: "sleet",
+    19: "hail showers",
+    20: "hail showers",
+    21: "hail",
+    22: "light snow showers",
+    23: "light snow showers",
+    24: "light snow",
+    25: "heavy snow showers",
+    26: "heavy snow showers",
+    27: "heavy snow",
+    28: "thunder showers",
+    29: "thunder showers",
+    30: "thunderstorms"
+  };
+
+  return descriptions[Number(code)] ||
+    "mixed conditions";
+}
+
+
+function numberOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number)
+    ? number
+    : null;
+}
+
+
+function pickNearestWeatherPeriod(periods) {
+  const now = Date.now();
+  let nearest = null;
+  let nearestDistance = Infinity;
+
+  for (const period of periods) {
+    const timestamp = Date.parse(period?.time);
+    if (!Number.isFinite(timestamp)) continue;
+    const distance = Math.abs(timestamp - now);
+    if (distance < nearestDistance) {
+      nearest = period;
+      nearestDistance = distance;
+    }
+  }
+
+  return nearest || periods[0] || null;
+}
+
+
+async function fetchMetOfficeWeather(
+  env,
+  location
+) {
+  if (!env.MET_OFFICE_API_KEY) {
+    return null;
+  }
+
+  const endpoint = new URL(
+    MET_OFFICE_WEATHER_URL
+  );
+  endpoint.searchParams.set(
+    "excludeParameterMetadata",
+    "true"
+  );
+  endpoint.searchParams.set(
+    "includeLocationName",
+    "true"
+  );
+  endpoint.searchParams.set(
+    "latitude",
+    String(location.latitude)
+  );
+  endpoint.searchParams.set(
+    "longitude",
+    String(location.longitude)
+  );
+  endpoint.searchParams.set(
+    "datasource",
+    "BD1"
+  );
+
+  const response = await fetch(
+    endpoint,
+    {
+      headers: {
+        Accept: "application/json",
+        apikey: env.MET_OFFICE_API_KEY
+      },
+      cf: {
+        cacheEverything: true,
+        cacheTtl: 900
+      }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Met Office Weather DataHub returned ${response.status}.`
+    );
+  }
+
+  const data = await response.json();
+  const feature = Array.isArray(data?.features)
+    ? data.features[0]
+    : null;
+  const properties = feature?.properties || {};
+  const rawPeriods = Array.isArray(properties.timeSeries)
+    ? properties.timeSeries
+    : [];
+
+  const periods = rawPeriods
+    .map(period => ({
+      time: cleanText(period?.time, 60),
+      temperature: numberOrNull(period?.screenTemperature),
+      feelsLike: numberOrNull(period?.feelsLikeTemperature),
+      condition: describeMetOfficeWeather(period?.significantWeatherCode),
+      precipitationProbability: numberOrNull(
+        period?.probOfPrecipitation ??
+        period?.probabilityOfPrecipitation
+      ),
+      precipitation: numberOrNull(
+        period?.totalPrecipAmount ??
+        period?.precipitationRate
+      ),
+      windSpeed: numberOrNull(period?.windSpeed10m),
+      windGust: numberOrNull(period?.windGustSpeed10m)
+    }))
+    .filter(period => period.time)
+    .slice(0, 192);
+
+  if (periods.length === 0) {
+    throw new Error(
+      "Met Office returned no hourly forecast periods."
+    );
+  }
+
+  return {
+    provider: "Met Office Weather DataHub",
+    model: "Met Office Global Spot site-specific forecast",
+    location,
+    updatedAt: cleanText(
+      properties.modelRunDate,
+      60
+    ) || periods[0].time,
+    current: pickNearestWeatherPeriod(periods),
+    hourly: periods,
+    daily: [],
+    source: {
+      title: "Met Office Weather DataHub",
+      url: "https://www.metoffice.gov.uk/services/data/met-office-weather-datahub",
+      snippet: "Official Met Office site-specific forecast data, updated hourly."
+    }
+  };
+}
+
+
+async function fetchOpenMeteoWeather(location) {
+  const endpoint = new URL(
+    OPEN_METEO_FORECAST_URL
+  );
+  endpoint.searchParams.set(
+    "latitude",
+    String(location.latitude)
+  );
+  endpoint.searchParams.set(
+    "longitude",
+    String(location.longitude)
+  );
+  endpoint.searchParams.set(
+    "current",
+    [
+      "temperature_2m",
+      "apparent_temperature",
+      "weather_code",
+      "precipitation",
+      "rain",
+      "wind_speed_10m",
+      "wind_gusts_10m"
+    ].join(",")
+  );
+  endpoint.searchParams.set(
+    "hourly",
+    [
+      "temperature_2m",
+      "apparent_temperature",
+      "precipitation",
+      "rain",
+      "showers",
+      "snowfall",
+      "weather_code",
+      "wind_speed_10m",
+      "wind_gusts_10m"
+    ].join(",")
+  );
+  endpoint.searchParams.set(
+    "daily",
+    [
+      "weather_code",
+      "temperature_2m_max",
+      "temperature_2m_min",
+      "precipitation_sum",
+      "rain_sum",
+      "snowfall_sum",
+      "wind_speed_10m_max",
+      "wind_gusts_10m_max"
+    ].join(",")
+  );
+  endpoint.searchParams.set(
+    "forecast_days",
+    "7"
+  );
+  endpoint.searchParams.set(
+    "timezone",
+    location.timezone || "auto"
+  );
+
+  const usesUkMetOfficeModel =
+    location.admin1 === "England" ||
+    location.countryCode === "GB";
+
+  endpoint.searchParams.set(
+    "models",
+    usesUkMetOfficeModel
+      ? "ukmo_seamless"
+      : "best_match"
+  );
+
+  const response = await fetch(
+    endpoint,
+    {
+      headers: {
+        Accept: "application/json"
+      },
+      cf: {
+        cacheEverything: true,
+        cacheTtl: 900
+      }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Weather service returned ${response.status}.`
+    );
+  }
+
+  const data = await response.json();
+  const hourlyTimes = Array.isArray(data?.hourly?.time)
+    ? data.hourly.time
+    : [];
+  const dailyTimes = Array.isArray(data?.daily?.time)
+    ? data.daily.time
+    : [];
+
+  const hourly = hourlyTimes
+    .map((time, index) => ({
+      time: cleanText(time, 60),
+      temperature: numberOrNull(data.hourly?.temperature_2m?.[index]),
+      feelsLike: numberOrNull(data.hourly?.apparent_temperature?.[index]),
+      condition: describeWmoWeather(data.hourly?.weather_code?.[index]),
+      precipitation: numberOrNull(data.hourly?.precipitation?.[index]),
+      rain: numberOrNull(data.hourly?.rain?.[index]),
+      showers: numberOrNull(data.hourly?.showers?.[index]),
+      snowfall: numberOrNull(data.hourly?.snowfall?.[index]),
+      windSpeed: numberOrNull(data.hourly?.wind_speed_10m?.[index]),
+      windGust: numberOrNull(data.hourly?.wind_gusts_10m?.[index])
+    }))
+    .slice(0, 192);
+
+  const daily = dailyTimes
+    .map((time, index) => ({
+      date: cleanText(time, 30),
+      condition: describeWmoWeather(data.daily?.weather_code?.[index]),
+      temperatureMax: numberOrNull(data.daily?.temperature_2m_max?.[index]),
+      temperatureMin: numberOrNull(data.daily?.temperature_2m_min?.[index]),
+      precipitation: numberOrNull(data.daily?.precipitation_sum?.[index]),
+      rain: numberOrNull(data.daily?.rain_sum?.[index]),
+      snowfall: numberOrNull(data.daily?.snowfall_sum?.[index]),
+      windSpeedMax: numberOrNull(data.daily?.wind_speed_10m_max?.[index]),
+      windGustMax: numberOrNull(data.daily?.wind_gusts_10m_max?.[index])
+    }))
+    .slice(0, 7);
+
+  const current = data?.current
+    ? {
+        time: cleanText(data.current.time, 60),
+        temperature: numberOrNull(data.current.temperature_2m),
+        feelsLike: numberOrNull(data.current.apparent_temperature),
+        condition: describeWmoWeather(data.current.weather_code),
+        precipitation: numberOrNull(data.current.precipitation),
+        rain: numberOrNull(data.current.rain),
+        windSpeed: numberOrNull(data.current.wind_speed_10m),
+        windGust: numberOrNull(data.current.wind_gusts_10m)
+      }
+    : pickNearestWeatherPeriod(hourly);
+
+  if (!current) {
+    throw new Error(
+      "Weather service returned no forecast periods."
+    );
+  }
+
+  return {
+    provider: usesUkMetOfficeModel
+      ? "UK Met Office model via Open-Meteo"
+      : "Open-Meteo best-match forecast",
+    model: usesUkMetOfficeModel
+      ? "UKMO seamless"
+      : "Best match for this location",
+    location,
+    updatedAt: current.time,
+    current,
+    hourly,
+    daily,
+    source: {
+      title: usesUkMetOfficeModel
+        ? "UK Met Office forecast model via Open-Meteo"
+        : "Open-Meteo forecast",
+      url: "https://open-meteo.com/en/docs",
+      snippet: usesUkMetOfficeModel
+        ? "Open-Meteo delivery of the UK Met Office seamless forecast model."
+        : "Location-specific forecast data supplied by Open-Meteo."
+    }
+  };
+}
+
+
+async function getWeatherForLocation(
+  env,
+  location
+) {
+  try {
+    const metOfficeWeather =
+      await fetchMetOfficeWeather(
+        env,
+        location
+      );
+
+    if (metOfficeWeather) {
+      return metOfficeWeather;
+    }
+  } catch (error) {
+    console.error(
+      "Met Office Weather DataHub error:",
+      error
+    );
+  }
+
+  return fetchOpenMeteoWeather(location);
+}
+
+
+function formatWeatherValue(value, suffix = "") {
+  return value === null || value === undefined
+    ? "not supplied"
+    : `${value}${suffix}`;
+}
+
+
+function createWeatherContextText(weather) {
+  if (!weather) {
+    return "No verified weather data is available.";
+  }
+
+  const current = weather.current || {};
+  const hourly = (weather.hourly || [])
+    .map(period =>
+      `${period.time}: ${formatWeatherValue(period.temperature, "°C")}, feels ${formatWeatherValue(period.feelsLike, "°C")}, ${period.condition}, precipitation ${formatWeatherValue(period.precipitation, " mm")}, wind ${formatWeatherValue(period.windSpeed, " km/h")}`
+    )
+    .join("\n");
+  const daily = (weather.daily || [])
+    .map(period =>
+      `${period.date}: ${period.condition}, low ${formatWeatherValue(period.temperatureMin, "°C")}, high ${formatWeatherValue(period.temperatureMax, "°C")}, precipitation ${formatWeatherValue(period.precipitation, " mm")}`
+    )
+    .join("\n");
+
+  return `
+Verified place: ${weather.location.displayName}
+Coordinates used: ${weather.location.latitude}, ${weather.location.longitude}
+Time zone: ${weather.location.timezone}
+Provider: ${weather.provider}
+Forecast model: ${weather.model}
+Data time/model update: ${weather.updatedAt}
+
+CURRENT CONDITIONS (location-specific forecast estimate, not a thermometer at the user's house):
+Time: ${current.time}
+Temperature: ${formatWeatherValue(current.temperature, "°C")}
+Feels like: ${formatWeatherValue(current.feelsLike, "°C")}
+Conditions: ${current.condition || "not supplied"}
+Precipitation: ${formatWeatherValue(current.precipitation, " mm")}
+Wind: ${formatWeatherValue(current.windSpeed, " km/h")}
+Wind gusts: ${formatWeatherValue(current.windGust, " km/h")}
+
+HOURLY DATA:
+${hourly || "No hourly data supplied."}
+
+DAILY SUMMARY:
+${daily || "No daily summary supplied by this provider."}
+`.trim();
+}
+
+
+function createCurrentWeatherAnswer(
+  weather,
+  dateTime
+) {
+  const current = weather.current;
+  const temperature = formatWeatherValue(
+    current.temperature,
+    "°C"
+  );
+  const feelsLike = formatWeatherValue(
+    current.feelsLike,
+    "°C"
+  );
+  const wind = current.windSpeed === null ||
+    current.windSpeed === undefined
+    ? ""
+    : ` Wind is ${current.windSpeed} km/h.`;
+
+  return `In ${weather.location.displayName}, it is ${temperature} and ${current.condition}. It feels like ${feelsLike}.${wind} The local time is ${dateTime.time} on ${dateTime.date}. Source: ${weather.provider}, updated ${weather.updatedAt}. This is a local forecast estimate, so the temperature directly outside your home can differ slightly.`;
 }
 
 const EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5";
@@ -777,7 +1694,27 @@ export default {
     if (url.pathname === "/api/profile" && request.method === "PATCH") {
       const body = await request.json();
       const displayName = cleanText(body?.displayName, 80);
-      const preferences = body?.preferences && typeof body.preferences === "object" ? body.preferences : {};
+      const requestedPreferences =
+        body?.preferences &&
+        typeof body.preferences === "object"
+          ? body.preferences
+          : {};
+      const preferences = {
+        responseStyle: [
+          "concise",
+          "balanced",
+          "detailed"
+        ].includes(requestedPreferences.responseStyle)
+          ? requestedPreferences.responseStyle
+          : "balanced",
+        voiceName: "luna",
+        voiceReplies:
+          requestedPreferences.voiceReplies !== false,
+        homeLocation:
+          cleanHomeLocation(
+            requestedPreferences.homeLocation
+          ) || DEFAULT_HOME_LOCATION
+      };
       await env.DB.prepare(`
         INSERT INTO profiles (user_id, display_name, preferences_json, updated_at)
         VALUES (?, ?, ?, current_timestamp)
@@ -1279,12 +2216,6 @@ export default {
           body?.conversationId ||
           null;
 
-        const currentDateTime =
-          getCurrentDateTimeContext(
-            body
-          );
-
-        const webSearchRequested = shouldSearchWeb(message);
         const attachments = Array.isArray(body?.attachments)
           ? body.attachments.slice(0, 3).map(file => ({
               name: cleanText(file?.name, 160),
@@ -1295,6 +2226,10 @@ export default {
         const responseStyle = ["concise", "balanced", "detailed"].includes(body?.preferences?.responseStyle)
           ? body.preferences.responseStyle
           : "balanced";
+        const homeLocation =
+          cleanHomeLocation(
+            body?.preferences?.homeLocation
+          ) || DEFAULT_HOME_LOCATION;
 
         if (!message) {
 
@@ -1306,6 +2241,71 @@ export default {
             400
           );
         }
+
+        const weatherRequested =
+          asksForWeather(message);
+        const locationTimeRequested =
+          asksForLocationDateOrTime(message) ||
+          asksForCurrentDateOrTime(message);
+        const needsLocation =
+          weatherRequested ||
+          locationTimeRequested;
+
+        let requestedPlace = null;
+        let resolvedLocation = null;
+        let locationLookupError = "";
+        let weather = null;
+
+        if (needsLocation) {
+          requestedPlace = extractRequestedPlace(
+            message,
+            homeLocation
+          );
+
+          try {
+            resolvedLocation = await geocodePlace(
+              requestedPlace.query
+            );
+          } catch (error) {
+            console.error(
+              "Location lookup error:",
+              error
+            );
+          }
+
+          if (!resolvedLocation) {
+            locationLookupError =
+              `I couldn't verify “${requestedPlace.query}” as a location. Please give me the town and county, a full UK postcode, or the country as well.`;
+          }
+        }
+
+        const currentDateTime =
+          getCurrentDateTimeContext(
+            body,
+            resolvedLocation?.timezone || ""
+          );
+
+        if (
+          weatherRequested &&
+          resolvedLocation
+        ) {
+          try {
+            weather = await getWeatherForLocation(
+              env,
+              resolvedLocation
+            );
+          } catch (error) {
+            console.error(
+              "Weather lookup error:",
+              error
+            );
+          }
+        }
+
+        const webSearchRequested =
+          shouldSearchWeb(message) &&
+          !weatherRequested &&
+          !locationTimeRequested;
 
 
         /* ----------------------------------------------
@@ -1413,9 +2413,17 @@ export default {
             ...webResults
           ].slice(0, 5);
         }
-        const webText = webResults.length
-          ? webResults.map((result, index) => `[${index + 1}] ${result.title}\n${result.snippet}\nSource: ${result.url}`).join("\n\n")
+        const sourceResults = [
+          ...(weather?.source
+            ? [weather.source]
+            : []),
+          ...webResults
+        ].slice(0, 5);
+        const webText = sourceResults.length
+          ? sourceResults.map((result, index) => `[${index + 1}] ${result.title}\n${result.snippet}\nSource: ${result.url}`).join("\n\n")
           : "No current web information was needed or available.";
+        const weatherText =
+          createWeatherContextText(weather);
         const attachmentText = attachments.length
           ? attachments.map(file => `File: ${file.name} (${file.type || "unknown type"})\n${file.text || "No extractable text."}`).join("\n\n")
           : "No attachments.";
@@ -1547,15 +2555,27 @@ use the correct mechanism.
 
 If something is uncertain, say so.
 
-CURRENT DATE AND TIME:
+CURRENT DATE, TIME AND LOCATION:
 
-The user's current local date is ${currentDateTime.date}.
+The relevant local date is ${currentDateTime.date}.
 
-The user's current local time is ${currentDateTime.time} in ${currentDateTime.timeZone}.
+The relevant local time is ${currentDateTime.time} in ${currentDateTime.timeZone}.
 
 The current UTC timestamp is ${currentDateTime.utc}.
 
 Treat this date and time as authoritative for this response. Use it for related calculations. When asked for the current date or time, answer directly and never claim that you lack real-time access to it.
+
+The user's saved home location is ${homeLocation}.
+
+The verified requested location is ${resolvedLocation?.displayName || "not available"}.
+
+Never turn Eston into Estonia. Unqualified English place names are checked against England first. Use only the verified location above for location-sensitive answers.
+
+VERIFIED WEATHER DATA:
+
+${weatherText}
+
+For weather questions, use only this verified weather data. Never invent a temperature, condition, forecast, location or update time. State that the temperature is a location-specific forecast estimate rather than a thermometer reading at the user's home. If the requested day or hour is outside the supplied range, say that reliable data is not available for that time. Mention the provider and data time naturally. Cite the supplied weather source as [1].
 
 CONVERSATION:
 
@@ -1575,7 +2595,7 @@ Only use a memory when genuinely relevant.
 
 Do not invent connections between unrelated memories.
 
-WEB RESULTS (provided automatically only when the question needs current or online information; only cite these as [1], [2], etc.; say when results are insufficient):
+CURRENT SOURCES (only cite these as [1], [2], etc.; say when results are insufficient):
 
 ${webText}
 
@@ -1613,13 +2633,43 @@ ${message}
         let response;
 
         if (
-          asksForCurrentDateOrTime(
+          locationLookupError
+        ) {
+
+          response =
+            locationLookupError;
+
+        } else if (
+          weatherRequested &&
+          !weather
+        ) {
+
+          response =
+            `I verified ${resolvedLocation.displayName}, but the weather service is temporarily unavailable. I won't guess the temperature. The local time is ${currentDateTime.time} on ${currentDateTime.date}.`;
+
+        } else if (
+          weather &&
+          asksForSimpleCurrentWeather(
             message
           )
         ) {
 
           response =
-            `It is ${currentDateTime.time} on ${currentDateTime.date} (${currentDateTime.timeZone}).`;
+            createCurrentWeatherAnswer(
+              weather,
+              currentDateTime
+            );
+
+        } else if (
+          asksForCurrentDateOrTime(
+            message
+          ) &&
+          !weatherRequested
+        ) {
+
+          response = resolvedLocation
+            ? `In ${resolvedLocation.displayName}, it is ${currentDateTime.time} on ${currentDateTime.date} (${currentDateTime.timeZone}).`
+            : `It is ${currentDateTime.time} on ${currentDateTime.date} (${currentDateTime.timeZone}).`;
 
         } else {
 
@@ -1629,7 +2679,10 @@ ${message}
               {
                 messages: aiMessages,
                 max_tokens: 700,
-                temperature: 0.35,
+                temperature:
+                  weatherRequested
+                    ? 0.15
+                    : 0.35,
                 top_p: 0.9,
                 repetition_penalty: 1.08
               }
@@ -1937,7 +2990,10 @@ NO
           response,
           conversationId:
             currentConversationId,
-          sources: webResults.map((result, index) => ({ ...result, number: index + 1 }))
+          sources: sourceResults.map((result, index) => ({
+            ...result,
+            number: index + 1
+          }))
         });
 
       } catch (error) {
