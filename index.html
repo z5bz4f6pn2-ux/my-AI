@@ -994,6 +994,17 @@
     .settings-section-title { margin: 6px 0 -3px; color: var(--text); font-size: 14px; font-weight: 700; }
     .voice-settings-note { margin: -5px 0 0; color: var(--muted-2); line-height: 1.45; }
     .voice-test-button { justify-self: start; }
+    .device-list { display: grid; gap: 9px; }
+    .device-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 12px; background: rgba(255,255,255,.035); }
+    .device-card strong { display: block; color: var(--text); font-size: 13px; }
+    .device-card span { color: var(--muted-2); font-size: 11px; }
+    .device-remove { padding: 7px 9px; border-radius: 8px; color: #ffaaa4; background: rgba(255,80,70,.1); cursor: pointer; }
+    .device-pair-box { display: none; gap: 9px; padding: 12px; border: 1px solid rgba(42,166,255,.4); border-radius: 12px; background: rgba(42,166,255,.08); }
+    .device-pair-box.open { display: grid; }
+    .device-token { width: 100%; font: 12px ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .device-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .device-actions a { text-decoration: none; }
+    .device-command-status { margin: 8px 0 2px; color: var(--muted-2); font-size: 12px; }
     .memory-header {
       display: flex;
       align-items: flex-start;
@@ -1589,6 +1600,20 @@
       <label class="setting-check"><input id="voiceReplies" type="checkbox" checked> Read replies aloud</label>
       <button type="button" class="header-button voice-test-button" onclick="testVoice()">Test voice</button>
       <p class="voice-settings-note">Luna is generated with Tom's AI's Cloudflare AI service. The text of a reply is sent there only to create audio.</p>
+      <h3 class="settings-section-title">Computer control</h3>
+      <p class="voice-settings-note">Connect this Windows computer to open approved apps, websites and files, change volume, take screenshots, or request lock, restart and shutdown. Disruptive actions always ask on the computer first.</p>
+      <div id="deviceList" class="device-list"><span>Loading computers…</span></div>
+      <button type="button" class="header-button" onclick="pairWindowsComputer()">Connect a Windows computer</button>
+      <div id="devicePairBox" class="device-pair-box">
+        <strong>One-time device token</strong>
+        <p class="voice-settings-note">Keep this private. Download both files into the same folder, run the installer, and paste this token when asked.</p>
+        <input id="devicePairToken" class="device-token" readonly aria-label="One-time device token">
+        <div class="device-actions">
+          <button type="button" class="header-button" onclick="copyDeviceToken()">Copy token</button>
+          <a class="header-button" href="/companion/windows/Install-TomsAICompanion.ps1" download>Download installer</a>
+          <a class="header-button" href="/companion/windows/TomsAICompanion.ps1" download>Download companion</a>
+        </div>
+      </div>
       <button class="header-button primary" onclick="saveProfile()">Save settings</button>
     </div>
   </div>
@@ -1768,7 +1793,7 @@
 
     closePanelsExcept(settingsPanel);
     settingsPanel.style.display = "block";
-    loadProfile();
+    void Promise.all([loadProfile(), loadDevices()]);
   }
 
   async function loadProfile() {
@@ -1799,6 +1824,123 @@
     if (!response.ok) return showToast(data.error || "Unable to save settings.");
     profile = { display_name: document.getElementById("displayName").value, preferences };
     showToast("Settings saved.");
+  }
+
+  async function loadDevices() {
+    const list = document.getElementById("deviceList");
+    list.textContent = "Loading computers…";
+
+    try {
+      const response = await fetch("/api/devices");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to load computers.");
+
+      list.replaceChildren();
+      if (!Array.isArray(data.devices) || !data.devices.length) {
+        const empty = document.createElement("span");
+        empty.textContent = "No Windows computer is connected yet.";
+        list.appendChild(empty);
+        return;
+      }
+
+      data.devices.forEach(device => {
+        const card = document.createElement("div");
+        card.className = "device-card";
+        const details = document.createElement("div");
+        const name = document.createElement("strong");
+        name.textContent = device.name || "Windows computer";
+        const status = document.createElement("span");
+        status.textContent = device.online ? "Online" : "Offline";
+        details.append(name, status);
+
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "device-remove";
+        remove.textContent = "Disconnect";
+        remove.addEventListener("click", () => disconnectDevice(device.id));
+        card.append(details, remove);
+        list.appendChild(card);
+      });
+    } catch (error) {
+      list.textContent = error.message;
+    }
+  }
+
+  async function pairWindowsComputer() {
+    const response = await fetch("/api/devices/pair", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "My Windows computer" })
+    });
+    const data = await response.json();
+    if (!response.ok) return showToast(data.error || "Unable to connect the computer.");
+
+    document.getElementById("devicePairToken").value = data.token;
+    document.getElementById("devicePairBox").classList.add("open");
+    await loadDevices();
+    showToast("Pairing token created. Download both Windows files next.");
+  }
+
+  async function copyDeviceToken() {
+    const token = document.getElementById("devicePairToken").value;
+    if (!token) return;
+    try {
+      await navigator.clipboard.writeText(token);
+      showToast("Device token copied.");
+    } catch {
+      document.getElementById("devicePairToken").select();
+      showToast("Token selected — press Ctrl+C to copy it.");
+    }
+  }
+
+  async function disconnectDevice(deviceId) {
+    if (!confirm("Disconnect this computer from Tom's AI?")) return;
+    const response = await fetch(`/api/devices/${encodeURIComponent(deviceId)}`, { method: "DELETE" });
+    const data = await response.json();
+    if (!response.ok) return showToast(data.error || "Unable to disconnect the computer.");
+    await loadDevices();
+    showToast("Computer disconnected.");
+  }
+
+  async function trackDeviceCommand(command, aiRow) {
+    if (!command?.id || !aiRow) return;
+    const statusElement = document.createElement("div");
+    statusElement.className = "device-command-status";
+    statusElement.textContent = command.requiresApproval
+      ? "Waiting for approval on your computer…"
+      : "Waiting for your computer…";
+    const messageElement = aiRow.querySelector(".message");
+    messageElement.insertBefore(statusElement, messageElement.querySelector(".message-actions"));
+
+    for (let attempt = 0; attempt < 35; attempt += 1) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      try {
+        const response = await fetch(`/api/device-commands/${encodeURIComponent(command.id)}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Unable to check the computer.");
+        const current = data.command;
+        if (current.status === "pending") continue;
+        if (current.status === "claimed") {
+          statusElement.textContent = command.requiresApproval
+            ? "Approve the request on your computer…"
+            : "Your computer is doing that now…";
+          continue;
+        }
+
+        if (current.status === "completed") {
+          statusElement.textContent = current.result_text || "Done on your computer.";
+        } else if (current.status === "rejected") {
+          statusElement.textContent = current.error_text || "You did not approve that action.";
+        } else {
+          statusElement.textContent = current.error_text || "Your computer could not complete that action.";
+        }
+        return;
+      } catch (error) {
+        if (attempt >= 34) statusElement.textContent = error.message;
+      }
+    }
+
+    statusElement.textContent = "The computer request is still pending.";
   }
 
   async function loadAdminUsage() {
@@ -3456,6 +3598,10 @@ function primeVoiceOutput() {
       chatElement.appendChild(
         aiRow
       );
+
+      if (data.deviceCommand) {
+        void trackDeviceCommand(data.deviceCommand, aiRow);
+      }
 
       if (Array.isArray(data.sources) && data.sources.length) {
         const sources = document.createElement("div");

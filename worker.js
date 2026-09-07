@@ -25,6 +25,36 @@ const OPEN_METEO_FORECAST_URL =
   "https://api.open-meteo.com/v1/forecast";
 const POSTCODES_IO_URL =
   "https://api.postcodes.io/postcodes";
+const DEFAULT_DEVICE_API_URL =
+  "https://my-ai-device.z5bz4f6pn2.workers.dev";
+
+const DEVICE_APP_ALIASES = Object.freeze({
+  calculator: "calculator",
+  calc: "calculator",
+  notepad: "notepad",
+  settings: "settings",
+  files: "files",
+  "file explorer": "files",
+  explorer: "files",
+  browser: "browser",
+  edge: "edge",
+  chrome: "chrome",
+  paint: "paint",
+  word: "word",
+  excel: "excel",
+  spotify: "spotify"
+});
+
+const DEVICE_WEBSITE_ALIASES = Object.freeze({
+  google: "https://www.google.co.uk",
+  youtube: "https://www.youtube.com",
+  gmail: "https://mail.google.com",
+  outlook: "https://outlook.live.com",
+  facebook: "https://www.facebook.com",
+  instagram: "https://www.instagram.com",
+  amazon: "https://www.amazon.co.uk",
+  bbc: "https://www.bbc.co.uk"
+});
 
 const ESTON_LOCATION = Object.freeze({
   name: "Eston",
@@ -326,6 +356,198 @@ function bytesToBase64(bytes) {
   }
 
   return btoa(binary);
+}
+
+
+function bytesToBase64Url(bytes) {
+  return bytesToBase64(bytes)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/g, "");
+}
+
+
+async function hashDeviceToken(token) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(token)
+  );
+  return bytesToBase64Url(new Uint8Array(digest));
+}
+
+
+function createDeviceToken() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return bytesToBase64Url(bytes);
+}
+
+
+function normalizeDeviceCommandText(message) {
+  return cleanText(message, 500)
+    .replace(/[’]/g, "'")
+    .replace(/^\s*(?:(?:can|could|would|will)\s+you\s+|please\s+|i\s+(?:want|need)\s+you\s+to\s+)+/i, "")
+    .trim();
+}
+
+
+function safeDeviceUrl(value) {
+  let candidate = cleanText(value, 500).replace(/[),.!?]+$/g, "");
+  if (!candidate) return "";
+  if (!/^https?:\/\//i.test(candidate)) candidate = `https://${candidate}`;
+
+  try {
+    const parsed = new URL(candidate);
+    if (!["http:", "https:"].includes(parsed.protocol)) return "";
+    if (!parsed.hostname.includes(".") || parsed.username || parsed.password) return "";
+    return parsed.href;
+  } catch {
+    return "";
+  }
+}
+
+
+function parseDeviceCommand(message) {
+  const command = normalizeDeviceCommandText(message);
+  if (!command) return null;
+
+  if (/^(?:lock)(?:\s+(?:my|the))?\s+(?:computer|pc|laptop)\s*[.!?]*$/i.test(command)) {
+    return { action: "lock", payload: {}, requiresApproval: true };
+  }
+  if (/^(?:restart|reboot)(?:\s+(?:my|the))?\s+(?:computer|pc|laptop)\s*[.!?]*$/i.test(command)) {
+    return { action: "restart", payload: {}, requiresApproval: true };
+  }
+  if (/^(?:shut\s*down|turn\s+off)(?:\s+(?:my|the))?\s+(?:computer|pc|laptop)\s*[.!?]*$/i.test(command)) {
+    return { action: "shutdown", payload: {}, requiresApproval: true };
+  }
+  if (/^(?:take|save)(?:\s+(?:a|the))?\s+screenshot(?:\s+(?:of|on)\s+(?:my|the)?\s*(?:computer|pc|laptop|screen))?\s*[.!?]*$/i.test(command)) {
+    return { action: "screenshot", payload: {}, requiresApproval: false };
+  }
+  if (/^(?:(?:turn|put)\s+)?(?:the\s+)?volume\s+up(?:\s+on\s+(?:my\s+)?(?:computer|pc|laptop))?\s*[.!?]*$/i.test(command)) {
+    return { action: "volume_up", payload: {}, requiresApproval: false };
+  }
+  if (/^(?:(?:turn|put)\s+)?(?:the\s+)?volume\s+down(?:\s+on\s+(?:my\s+)?(?:computer|pc|laptop))?\s*[.!?]*$/i.test(command)) {
+    return { action: "volume_down", payload: {}, requiresApproval: false };
+  }
+  if (/^(?:mute|unmute)(?:\s+(?:the\s+)?(?:sound|volume))?(?:\s+on\s+(?:my\s+)?(?:computer|pc|laptop))?\s*[.!?]*$/i.test(command)) {
+    return { action: "volume_mute", payload: {}, requiresApproval: false };
+  }
+
+  const fileMatch = /^(?:find|open)\s+(?:the\s+)?(?:file|document|photo|picture)\s+(?:(?:called|named)\s+)?(.+?)(?:\s+on\s+(?:my\s+)?(?:computer|pc|laptop))?\s*[.!?]*$/i.exec(command);
+  if (fileMatch) {
+    const query = cleanText(fileMatch[1], 120).replace(/^['"]|['"]$/g, "").trim();
+    if (query && !/[\\/]/.test(query)) {
+      return { action: "open_file", payload: { query }, requiresApproval: false };
+    }
+  }
+
+  const appNames = Object.keys(DEVICE_APP_ALIASES).sort((a, b) => b.length - a.length).join("|");
+  const appMatch = new RegExp(
+    `^(?:open|launch|start)\\s+(?:the\\s+)?(${appNames.replaceAll(" ", "\\s+")})(?:\\s+(?:on|using)\\s+(?:my\\s+)?(?:computer|pc|laptop))?\\s*[.!?]*$`,
+    "i"
+  ).exec(command);
+  if (appMatch) {
+    const app = DEVICE_APP_ALIASES[appMatch[1].toLowerCase().replace(/\s+/g, " ")];
+    return { action: "open_app", payload: { app }, requiresApproval: false };
+  }
+
+  const websiteNameMatch = /^(?:open|visit|go\s+to)\s+(google|youtube|gmail|outlook|facebook|instagram|amazon|bbc)(?:\s+(?:on|using)\s+(?:my\s+)?(?:computer|pc|laptop))?\s*[.!?]*$/i.exec(command);
+  if (websiteNameMatch) {
+    const website = websiteNameMatch[1].toLowerCase();
+    return {
+      action: "open_url",
+      payload: { url: DEVICE_WEBSITE_ALIASES[website], label: website },
+      requiresApproval: false
+    };
+  }
+
+  const urlMatch = /^(?:open|visit|go\s+to)\s+((?:https?:\/\/)?(?:www\.)?[a-z0-9-]+(?:\.[a-z]{2,})(?:\/[^\s]*)?)(?:\s+(?:on|using)\s+(?:my\s+)?(?:computer|pc|laptop))?\s*[.!?]*$/i.exec(command);
+  if (urlMatch) {
+    const url = safeDeviceUrl(urlMatch[1]);
+    if (url) return { action: "open_url", payload: { url }, requiresApproval: false };
+  }
+
+  return null;
+}
+
+
+function describeQueuedDeviceCommand(command) {
+  const app = command.payload?.app;
+  const query = command.payload?.query;
+  const label = command.payload?.label;
+  const descriptions = {
+    open_app: `Opening ${app} on your computer.`,
+    open_url: `Opening ${label || new URL(command.payload.url).hostname} on your computer.`,
+    open_file: `Finding and opening “${query}” on your computer.`,
+    volume_up: "Turning your computer volume up.",
+    volume_down: "Turning your computer volume down.",
+    volume_mute: "Toggling mute on your computer.",
+    screenshot: "Taking a screenshot and saving it in your Pictures folder.",
+    lock: "I sent the lock request. Confirm it on your computer to continue.",
+    restart: "I sent the restart request. Confirm it on your computer to continue.",
+    shutdown: "I sent the shutdown request. Confirm it on your computer to continue."
+  };
+  return descriptions[command.action] || "I sent that request to your computer.";
+}
+
+
+let deviceSchemaPromise = null;
+
+function ensureDeviceSchema(db) {
+  if (!deviceSchemaPromise) {
+    deviceSchemaPromise = db.batch([
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS devices (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          token_hash TEXT NOT NULL UNIQUE,
+          platform TEXT NOT NULL DEFAULT 'windows',
+          last_seen TEXT,
+          created_at TEXT NOT NULL DEFAULT current_timestamp,
+          revoked_at TEXT
+        )
+      `),
+      db.prepare(`
+        CREATE INDEX IF NOT EXISTS idx_devices_user_active
+        ON devices(user_id, revoked_at, last_seen)
+      `),
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS device_commands (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          device_id TEXT NOT NULL,
+          action TEXT NOT NULL CHECK(action IN (
+            'open_app', 'open_url', 'open_file', 'volume_up', 'volume_down',
+            'volume_mute', 'screenshot', 'lock', 'restart', 'shutdown'
+          )),
+          payload_json TEXT NOT NULL DEFAULT '{}',
+          status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN (
+            'pending', 'claimed', 'completed', 'failed', 'rejected', 'expired'
+          )),
+          requires_approval INTEGER NOT NULL DEFAULT 0,
+          result_text TEXT,
+          error_text TEXT,
+          created_at TEXT NOT NULL DEFAULT current_timestamp,
+          claimed_at TEXT,
+          completed_at TEXT,
+          FOREIGN KEY(device_id) REFERENCES devices(id)
+        )
+      `),
+      db.prepare(`
+        CREATE INDEX IF NOT EXISTS idx_device_commands_next
+        ON device_commands(device_id, status, created_at)
+      `),
+      db.prepare(`
+        CREATE INDEX IF NOT EXISTS idx_device_commands_owner
+        ON device_commands(user_id, id)
+      `)
+    ]).catch(error => {
+      deviceSchemaPromise = null;
+      throw error;
+    });
+  }
+  return deviceSchemaPromise;
 }
 
 
@@ -1544,6 +1766,11 @@ async function getConversationContext(
    WORKER
    ================================================== */
 
+export {
+  parseDeviceCommand,
+  safeDeviceUrl
+};
+
 export default {
 
   async fetch(
@@ -1783,6 +2010,97 @@ export default {
           updated_at = current_timestamp
       `).bind(userId, displayName, JSON.stringify(preferences)).run();
       return json({ success: true });
+    }
+
+    /* ==================================================
+       WINDOWS COMPANION DEVICES
+       ================================================== */
+
+    if (url.pathname === "/api/devices" && request.method === "GET") {
+      await ensureDeviceSchema(env.DB);
+      const result = await env.DB.prepare(`
+        SELECT id, name, platform, last_seen, created_at,
+          CASE
+            WHEN last_seen >= datetime('now', '-90 seconds') THEN 1
+            ELSE 0
+          END AS online
+        FROM devices
+        WHERE user_id = ? AND revoked_at IS NULL
+        ORDER BY COALESCE(last_seen, created_at) DESC
+      `).bind(userId).all();
+
+      return json({
+        devices: (result.results || []).map(device => ({
+          ...device,
+          online: Boolean(device.online)
+        }))
+      });
+    }
+
+    if (url.pathname === "/api/devices/pair" && request.method === "POST") {
+      await ensureDeviceSchema(env.DB);
+      let body = {};
+      try {
+        body = await request.json();
+      } catch {}
+
+      const name = cleanText(body?.name, 80) || "My Windows computer";
+      const token = createDeviceToken();
+      const tokenHash = await hashDeviceToken(token);
+      const deviceId = crypto.randomUUID();
+
+      await env.DB.prepare(`
+        INSERT INTO devices (id, user_id, name, token_hash, platform)
+        VALUES (?, ?, ?, ?, 'windows')
+      `).bind(deviceId, userId, name, tokenHash).run();
+
+      return json({
+        device: { id: deviceId, name, platform: "windows", online: false },
+        token,
+        serviceUrl: cleanText(env.DEVICE_API_URL, 300) || DEFAULT_DEVICE_API_URL,
+        note: "This token is shown once. Keep it private."
+      }, 201);
+    }
+
+    const deviceMatch = /^\/api\/devices\/([0-9a-f-]{36})$/i.exec(url.pathname);
+    if (deviceMatch && request.method === "DELETE") {
+      await ensureDeviceSchema(env.DB);
+      const device = await env.DB.prepare(`
+        SELECT id FROM devices WHERE id = ? AND user_id = ? AND revoked_at IS NULL
+      `).bind(deviceMatch[1], userId).first();
+      if (!device) return json({ error: "Computer not found." }, 404);
+
+      await env.DB.batch([
+        env.DB.prepare(`
+          UPDATE devices SET revoked_at = current_timestamp
+          WHERE id = ? AND user_id = ? AND revoked_at IS NULL
+        `).bind(deviceMatch[1], userId),
+        env.DB.prepare(`
+          UPDATE device_commands
+          SET status = 'expired', completed_at = current_timestamp,
+              error_text = 'The computer was disconnected.'
+          WHERE device_id = ? AND user_id = ? AND status IN ('pending', 'claimed')
+        `).bind(deviceMatch[1], userId)
+      ]);
+      return json({ success: true });
+    }
+
+    const commandStatusMatch = /^\/api\/device-commands\/([0-9a-f-]{36})$/i.exec(url.pathname);
+    if (commandStatusMatch && request.method === "GET") {
+      await ensureDeviceSchema(env.DB);
+      const command = await env.DB.prepare(`
+        SELECT id, action, status, requires_approval, result_text, error_text,
+          created_at, claimed_at, completed_at
+        FROM device_commands
+        WHERE id = ? AND user_id = ?
+      `).bind(commandStatusMatch[1], userId).first();
+      if (!command) return json({ error: "Computer request not found." }, 404);
+      return json({
+        command: {
+          ...command,
+          requiresApproval: Boolean(command.requires_approval)
+        }
+      });
     }
 
     if (url.pathname === "/api/admin/usage" && request.method === "GET") {
@@ -2309,6 +2627,8 @@ export default {
         const needsLocation =
           weatherRequested ||
           locationTimeRequested;
+        const requestedDeviceAction =
+          parseDeviceCommand(message);
 
         let requestedPlace = null;
         let resolvedLocation = null;
@@ -2440,8 +2760,57 @@ export default {
           )
           .run();
 
+        let deviceResponse = "";
+        let deviceCommand = null;
+
+        if (requestedDeviceAction) {
+          await ensureDeviceSchema(env.DB);
+          const device = await env.DB.prepare(`
+            SELECT id, name,
+              CASE
+                WHEN last_seen >= datetime('now', '-90 seconds') THEN 1
+                ELSE 0
+              END AS online
+            FROM devices
+            WHERE user_id = ? AND revoked_at IS NULL
+            ORDER BY COALESCE(last_seen, created_at) DESC
+            LIMIT 1
+          `).bind(userId).first();
+
+          if (!device) {
+            deviceResponse =
+              "First connect your Windows computer in Profile & settings, then ask me again.";
+          } else if (!Boolean(device.online)) {
+            deviceResponse =
+              `${device.name} is offline. Start the Tom's AI Windows companion, then ask me again.`;
+          } else {
+            const commandId = crypto.randomUUID();
+            await env.DB.prepare(`
+              INSERT INTO device_commands
+                (id, user_id, device_id, action, payload_json, requires_approval)
+              VALUES (?, ?, ?, ?, ?, ?)
+            `).bind(
+              commandId,
+              userId,
+              device.id,
+              requestedDeviceAction.action,
+              JSON.stringify(requestedDeviceAction.payload || {}),
+              requestedDeviceAction.requiresApproval ? 1 : 0
+            ).run();
+
+            deviceResponse = describeQueuedDeviceCommand(requestedDeviceAction);
+            deviceCommand = {
+              id: commandId,
+              status: "pending",
+              requiresApproval: requestedDeviceAction.requiresApproval,
+              deviceName: device.name
+            };
+          }
+        }
+
 
         const canAnswerWithoutModel = Boolean(
+          deviceResponse ||
           locationLookupError ||
           (weatherRequested && !weather) ||
           (
@@ -2721,6 +3090,12 @@ ${message}
         let response;
 
         if (
+          deviceResponse
+        ) {
+
+          response = deviceResponse;
+
+        } else if (
           locationLookupError
         ) {
 
@@ -3092,6 +3467,7 @@ NO
           response,
           conversationId:
             currentConversationId,
+          deviceCommand,
           sources: sourceResults.map((result, index) => ({
             ...result,
             number: index + 1
